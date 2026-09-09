@@ -15,5 +15,5 @@
     "noEmit": true,
     "plugins": [{ "name": "@effect/language-service" }]
   },
-  "include": ["src", "test", "vite.config.ts"]
+  "include": ["src", "test", ".pipes", "vite.config.ts"]
 }

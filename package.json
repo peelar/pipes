@@ -7,6 +7,9 @@
     "pipesd": "src/server.ts"
   },
   "type": "module",
+  "exports": {
+    "./config": "./src/config.ts"
+  },
   "scripts": {
     "db:reset": "bun scripts/reset-db.ts",
     "dev": "bun src/cli.ts",

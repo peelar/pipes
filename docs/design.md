@@ -55,7 +55,11 @@ Code-defined workflows are reusable entry points, not only source-triggered auto
 
 Use ordinary TypeScript exports and imports for reuse. Steps are declared within workflows; there is no separate managed pipe or profile registry.
 
-Each step defines an ACP provider, model, reasoning setting, and static prompt. Pipes supplies standard context: the captured task request, feedback, previous results, and artifact references. Each step starts a fresh agent session. Files and explicit results carry work between steps; full transcripts are retained as evidence rather than automatically fed into every prompt.
+Configuration is declarative: plain objects describe workflows and their ordered steps. `plan → implement → review` is an editable example, not a built-in execution mode.
+The repository configuration entry point is `.pipes/pipes.ts`.
+The `base` setting is optional; resolution when omitted remains unspecified until execution is implemented.
+
+Each step defines an agent provider (such as `codex`), model, reasoning setting, and static prompt. Pipes resolves the provider to its ACP adapter and launch arguments; ACP is an implementation detail. A custom command is an optional advanced override. Pipes supplies standard context: the captured task request, feedback, previous results, and artifact references. Each step starts a fresh agent session. Files and explicit results carry work between steps; full transcripts are retained as evidence rather than automatically fed into every prompt.
 
 TypeScript resolves to a serializable workflow definition at run start. Store that definition with the run. Later configuration edits affect new runs.
 
@@ -95,7 +99,7 @@ Execution is permissive by default. Pushing belongs to the user. Broader sandbox
 
 An environment is an explicit abstraction. It prepares a workspace, runs and stops commands or workers, retrieves files and artifacts, and describes how to access the workspace. Clients must not require every environment to expose a host-local path.
 
-The first implementation uses one Git worktree and branch per run. Fresh tasks start from a configured local branch or revision, recording the resolved commit. Do not automatically fetch a remote base. Follow-up runs start from the previous result.
+The first implementation uses one Git worktree and branch per run. Fresh tasks start from a local branch or revision, optionally selected by `base`, recording the resolved commit. Do not automatically fetch a remote base. Follow-up runs start from the previous result.
 
 After execution stops, preserve project changes in a local Git checkpoint, including relevant uncommitted and untracked changes. Record its revision. Ignored environment files stay outside the checkpoint; larger evidence belongs in artifact storage. Nothing is pushed.
 
@@ -170,7 +174,7 @@ Capabilities such as runners, sources, environments, persistence, and artifact s
 
 The split is: **Effect owns execution; SQLite provides durability; Pipes owns workflow semantics and state transitions.** Do not use Effect Workflow as the durable engine.
 
-Allow configurable ACP provider commands. Initially qualify the complete flow against Codex's ACP adapter; other providers can be configured without a compatibility guarantee.
+The provider setting is an enum with only `codex` supported initially. Allow an optional custom ACP command override for that provider. Add other provider values explicitly as support is implemented.
 
 Support macOS and Linux; Windows users can use WSL. Ship an executable or release bundle containing the Pipes runtime. Agent providers and development tools remain separate prerequisites.
 

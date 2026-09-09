@@ -40,6 +40,39 @@ in `~/.local/share/pipes/`. Override `PIPES_DATA_DIR` and `PIPES_PORT` together 
 run an isolated instance. The default port is 43187. Queue updates arrive over an
 Effect RPC stream refreshed once per second. Reopen the client after server loss.
 
+## Repository configuration
+
+[.pipes/pipes.ts](.pipes/pipes.ts) is the editable `plan → implement → review`
+example. It exports a plain object checked with `satisfies Config`; no builder or
+workflow DSL is needed. Ordinary TypeScript constants and imports share settings.
+
+- `base`: optional local Git branch or revision for fresh runs. Default resolution
+  will be defined when execution is connected.
+- `setup`: optional command, expressed as `[executable, ...arguments]`.
+- `workflows`: named workflows, each containing an ordered `steps` array.
+- Each step has a unique `name`, a static `prompt`, and an `agent` containing its
+  `provider` (currently only `codex`), exact `model`, and `reasoning` IDs.
+
+Pipes will resolve the provider to its adapter and launch arguments. An optional
+agent `command` override accepts `[executable, ...arguments]` for custom launches.
+Replace the example's model and reasoning placeholders with settings advertised
+by your provider. Step prompts describe assignments; Pipes will supply task context and
+previous results separately when execution is connected.
+
+Validate and print the resolved configuration:
+
+```sh
+bun run pipes config        # .pipes/pipes.ts in the current directory
+bun run pipes config /path/to/repository
+```
+
+This runs trusted repository TypeScript, including its imports, and checks the
+default export with Effect Schema. Unknown fields, empty workflows, duplicate
+step names, and malformed settings fail explicitly. Each command loads a fresh
+configuration. Validation does not launch an agent, run setup, or verify that a
+provider supports the chosen settings; ACP integration comes next. Registration
+still only records the repository and does not generate configuration files.
+
 ## Development tooling
 
 To start user testing from scratch, close the TUI and run `bun run db:reset`, then
