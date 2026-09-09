@@ -114,7 +114,7 @@ test('first launch animates the README logo once, continues automatically, and s
     await act(async () => {
       await Bun.sleep(160);
     });
-    expect(view.captureCharFrame()).toContain('╭────');
+    expect(view.captureCharFrame()).toContain(logo.slice(0, 5));
     expect(view.captureCharFrame()).not.toContain(logo.split('\n')[0]!);
     await act(async () => {
       await Bun.sleep(1000);
