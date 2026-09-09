@@ -10,7 +10,7 @@
 ╰─╯        ╰───────╯  ╰─╯        ╰───────╯  ╰───────╯
 ```
 
-A personal software factory for organizing incoming work and getting it done through agentic pipelines defined in code.
+A personal software factory that organizes incoming work and runs it through code-defined agent pipelines.
 
 ## Features
 
