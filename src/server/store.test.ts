@@ -186,7 +186,7 @@ test('discard removes a task from the queue while preserving its stored history'
       );
       INSERT INTO transitions SELECT * FROM transitions_fixed;
       DROP TABLE transitions_fixed;
-      DELETE FROM effect_sql_migrations WHERE migration_id = 6;
+      DELETE FROM effect_sql_migrations WHERE migration_id >= 6;
     `);
     legacy.close();
     runtime = makeRuntime();

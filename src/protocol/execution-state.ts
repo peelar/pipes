@@ -16,7 +16,7 @@ export type ExecutionStatus = typeof ExecutionStatus.Type;
 export const executionTransitions = {
   awaiting_acceptance: { fail: 'failed' },
   blocked: { fail: 'failed', jumpIn: 'human_owned' },
-  cancelled: {},
+  cancelled: { start: 'queued' },
   cancelling: { fail: 'failed', interrupt: 'interrupted', stopped: 'cancelled' },
   failed: { fail: 'failed', jumpIn: 'human_owned' },
   human_owned: { jumpIn: 'human_owned', start: 'queued' },

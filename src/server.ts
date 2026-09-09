@@ -7,9 +7,10 @@ import { join } from 'node:path';
 import { settings, type Connection } from './client/connection';
 import { PipesError, PipesRpcs } from './protocol/pipes';
 import { Execution } from './server/execution';
+import { Environment } from './server/environment';
 import { Store } from './server/store';
 import { GitHub } from './server/github';
-import { checkCodexConfig, installCodexSkill, probeCodex, setupCodex } from './server/codex';
+import { checkCodexConfig, installCodex, probeCodex, setupCodex } from './server/codex';
 import { ObservabilityLayer } from './observability';
 import { readConversation } from './server/conversation';
 
@@ -17,6 +18,7 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
   const stopped = yield* Deferred.make<void>();
   const services = yield* Layer.build(
     Layer.merge(GitHub.layer, Execution.layer(connection.directory)).pipe(
+      Layer.provide(Environment.layer),
       Layer.provideMerge(Store.layer(join(connection.directory, 'pipes.sqlite'))),
     ),
   );
@@ -27,13 +29,13 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
       const execution = yield* Execution;
       return {
         cancel: ({ taskId }) => execution.cancel(taskId),
+        codexInstall: () => installCodex(),
         codexProbe: probeCodex,
         codexSetup: setupCodex,
-        codexSkillInstall: () => installCodexSkill(),
         configCheck: ({ path }) => checkCodexConfig(path),
         conversation: ({ taskId }) =>
           Effect.gen(function* () {
-            const run = (yield* store.snapshot).runs?.find((run) => run.taskId === taskId);
+            const run = (yield* store.snapshot).runs?.findLast((run) => run.taskId === taskId);
             if (!run) {
               return yield* new PipesError({ message: 'This task has no execution conversation.' });
             }

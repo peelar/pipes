@@ -19,6 +19,7 @@ import {
 } from './cli/commands';
 import { config } from './cli/config';
 import { connection } from './cli/connection';
+import { mcp } from './cli/mcp';
 import { PipesError } from './protocol/pipes';
 import { ObservabilityLayer } from './observability';
 
@@ -49,6 +50,9 @@ Command.make(
     register,
     submit,
     list,
+    Command.make('mcp', {}, mcp).pipe(
+      Command.withDescription('Run the Pipes MCP server over stdio'),
+    ),
     start,
     stop,
     cancel,

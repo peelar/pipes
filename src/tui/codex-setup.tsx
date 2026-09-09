@@ -54,7 +54,8 @@ function transitionKey(state: SetupState, key: string, phase: Phase, pending: bo
             ? { status: 'validating' }
             : state;
     case 'i':
-      return state.status === 'connected' && !state.settings.skillInstalled
+      return state.status === 'connected' &&
+        (!state.settings.mcpInstalled || !state.settings.skillInstalled)
         ? { ...state, status: 'installing' }
         : state;
     case 'r':
@@ -80,7 +81,10 @@ export function transitionSetup(state: SetupState, event: SetupEvent): SetupStat
       return pending ? { error: event.error, phase, status: 'failed' } : state;
     case 'installed':
       return state.status === 'installing'
-        ? { settings: { ...state.settings, skillInstalled: true }, status: 'connected' }
+        ? {
+            settings: { ...state.settings, mcpInstalled: true, skillInstalled: true },
+            status: 'connected',
+          }
         : state;
     case 'done':
       return ['creating', 'validating'].includes(state.status)
@@ -95,7 +99,7 @@ function SetupContent({ busy, state }: { busy: boolean; state: SetupState }) {
   if (busy) {
     const message =
       state.status === 'installing'
-        ? 'Installing Pipes skill…'
+        ? 'Installing Pipes MCP & skill…'
         : state.status === 'validating'
           ? 'Validating configuration and its agent settings…'
           : state.status === 'creating'
@@ -111,17 +115,17 @@ function SetupContent({ busy, state }: { busy: boolean; state: SetupState }) {
   }
   if (state.status === 'workflow') {
     return state.settings.configurationExists ? (
-      <text>.pipes/pipes.ts already exists. Validate it to finish setup.</text>
+      <text>.pipes/config.ts already exists. Validate it to finish setup.</text>
     ) : (
       <>
-        <text>We’ll create .pipes/pipes.ts with example pipes.</text>
+        <text>We’ll create .pipes/config.ts with example pipes.</text>
         <text fg="#a6adc8">Preview · agent settings and prompts abbreviated</text>
         <diff
           addedBg="#20302b"
           addedContentBg="#20302b"
           addedSignColor="#a6e3a1"
           diff={`--- /dev/null
-+++ b/.pipes/pipes.ts
++++ b/.pipes/config.ts
 @@ -0,0 +1,11 @@
 + export default {
 +   workflows: {
@@ -148,8 +152,12 @@ function SetupContent({ busy, state }: { busy: boolean; state: SetupState }) {
   return (
     <>
       <text fg="#a6e3a1">✓ Connected to Codex</text>
-      <text fg={state.settings.skillInstalled ? '#a6e3a1' : '#f9e2af'}>
-        {state.settings.skillInstalled ? '✓ Pipes skill installed' : '○ Pipes skill not installed'}
+      <text
+        fg={state.settings.mcpInstalled && state.settings.skillInstalled ? '#a6e3a1' : '#f9e2af'}
+      >
+        {state.settings.mcpInstalled && state.settings.skillInstalled
+          ? '✓ Pipes MCP & skill installed'
+          : '○ Pipes MCP & skill not installed'}
       </text>
     </>
   );
@@ -192,7 +200,7 @@ export function CodexSetup({
           const client = yield* Client;
           switch (state.status) {
             case 'installing':
-              return yield* client.codexSkillInstall();
+              return yield* client.codexInstall();
             case 'validating':
               return yield* client.configCheck({ path });
             case 'creating':
@@ -280,7 +288,7 @@ function SetupShortcuts({ state, wizard }: { state: SetupState; wizard: boolean 
       (key) =>
         ({
           b: '[b] back',
-          i: '[i] install skill',
+          i: '[i] install MCP & skill',
           r: '[r] retry',
           return:
             state.status === 'workflow'

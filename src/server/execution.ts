@@ -1,14 +1,9 @@
 import { Cause, Context, DateTime, Effect, Fiber, Layer, Schema, Semaphore } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { homedir } from 'node:os';
-import { Config } from '../config';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { Attempt, PipesError, Run, StepResult } from '../protocol/pipes';
 import { nextExecutionState, type ExecutionEvent } from '../protocol/execution-state';
-import { openCodex, probeCodex } from './codex';
 import { Environment } from './environment';
-import { resultMcp } from './result-mcp';
 import { Store } from './store';
 
 const failure = (error: unknown) =>
@@ -51,7 +46,6 @@ export class Execution extends Context.Service<
         const context = yield* Effect.context<never>();
         const store = yield* Store;
         const environment = yield* Environment;
-        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
         const limit = yield* Schema.decodeEffect(
           Schema.Int.check(Schema.isBetween({ maximum: 64, minimum: 1 })),
         )(Number(process.env.PIPES_CONCURRENCY ?? 1));
@@ -64,7 +58,7 @@ export class Execution extends Context.Service<
         const currentRun = Effect.fn('Execution.currentRun')(function* (taskId: string) {
           return (
             activeRuns.get(taskId)?.() ??
-            (yield* store.snapshot).runs?.find((run) => run.taskId === taskId)
+            (yield* store.snapshot).runs?.findLast((run) => run.taskId === taskId)
           );
         });
 
@@ -88,11 +82,11 @@ export class Execution extends Context.Service<
             for (const step of remaining) {
               const key = JSON.stringify(step.agent);
               if (!checked.has(key)) {
-                yield* probeCodex({ ...step.agent, path: repository });
+                yield* environment.probe(repository, step.agent);
                 checked.add(key);
               }
             }
-            if (!existsSync(run.workspace)) {
+            if (!(yield* environment.exists(run))) {
               yield* environment.prepare(repository, run);
               if (run.configuration.setup) {
                 yield* environment.setup(run.workspace, run.configuration.setup);
@@ -119,41 +113,6 @@ export class Execution extends Context.Service<
               };
               yield* save();
               yield* Effect.gen(function* () {
-                let accepting = true;
-                const mcp = yield* Effect.acquireRelease(
-                  Effect.try({
-                    catch: failure,
-                    try: () =>
-                      resultMcp(async (result) => {
-                        if (!accepting || attempt.result || cancellations.has(run.taskId)) {
-                          throw new Error('This attempt already reported a result or has ended.');
-                        }
-                        attempt = { ...attempt, result };
-                        await Effect.runPromiseWith(context)(saveAttempt());
-                      }),
-                  }),
-                  ({ server }) =>
-                    Effect.promise(async () => {
-                      accepting = false;
-                      await server.stop(true);
-                    }),
-                );
-                const session = yield* openCodex(
-                  { ...step.agent, path: run.workspace },
-                  {
-                    mcpServers: [mcp.configuration],
-                    update: (notification) =>
-                      appendFileSync(transcript, `${JSON.stringify(notification)}\n`, {
-                        mode: 0o600,
-                      }),
-                  },
-                );
-                attempt = {
-                  ...attempt,
-                  codexHome: resolve(process.env.CODEX_HOME ?? join(homedir(), '.codex')),
-                  sessionId: session.sessionId,
-                };
-                yield* saveAttempt();
                 const prompt = [
                   `Pipes task ${run.taskId}, run ${run.id}, step ${step.name}, attempt ${attemptId}.`,
                   `Task: ${run.title}\n${run.brief}`,
@@ -167,26 +126,32 @@ export class Execution extends Context.Service<
                     .join('\n\n')}`,
                   'Work locally. Do not push, publish, merge, or act on other steps. Submit completed, blocked, or failed with a summary using the Pipes report_result MCP tool, then end your turn. Include changes, checks, and unresolved concerns. A plain final message does not complete the step.',
                 ].join('\n\n');
-                yield* Effect.try({
-                  catch: failure,
-                  try: () =>
-                    appendFileSync(transcript, `${JSON.stringify({ prompt })}\n`, { mode: 0o600 }),
-                });
-                const response = yield* Effect.tryPromise({
-                  catch: failure,
-                  try: () =>
-                    session.connection.agent.request('session/prompt', {
-                      prompt: [{ text: prompt, type: 'text' }],
-                      sessionId: session.sessionId,
+                yield* environment.execute({
+                  agent: step.agent,
+                  path: run.workspace,
+                  prompt,
+                  report: async (result) => {
+                    if (attempt.result || cancellations.has(run.taskId)) {
+                      throw new Error('This attempt already reported a result or has ended.');
+                    }
+                    attempt = { ...attempt, result };
+                    await Effect.runPromiseWith(context)(saveAttempt());
+                  },
+                  session: (session) => {
+                    attempt = { ...attempt, ...session };
+                    return saveAttempt();
+                  },
+                  update: (notification) =>
+                    appendFileSync(transcript, `${JSON.stringify(notification)}\n`, {
+                      mode: 0o600,
                     }),
                 });
-                accepting = false;
-                if (response.stopReason !== 'end_turn' || !attempt.result) {
+                if (!attempt.result) {
                   return yield* new PipesError({
-                    message: `Step ${step.name} ended with ${response.stopReason}${attempt.result ? '' : ' without reporting a Pipes result'}.`,
+                    message: `Step ${step.name} ended without reporting a Pipes result.`,
                   });
                 }
-              }).pipe(Effect.scoped, slots.withPermit);
+              }).pipe(slots.withPermit);
               attempt = { ...attempt, status: attempt.result!.status };
               yield* saveAttempt();
               run = { ...run, summary: attempt.result!.summary };
@@ -242,6 +207,18 @@ export class Execution extends Context.Service<
                         }),
                       ),
                     );
+                    if (run.status === 'awaiting_acceptance') {
+                      yield* environment.cleanup(repository, run).pipe(
+                        Effect.catch((error) =>
+                          Effect.sync(() => {
+                            run = {
+                              ...transition(run, 'fail'),
+                              summary: `${run.summary}\nCleanup failed: ${error.message}`,
+                            };
+                          }),
+                        ),
+                      );
+                    }
                   }
                   if (run.status === 'cancelling') {
                     run = transition(run, 'stopped');
@@ -256,7 +233,6 @@ export class Execution extends Context.Service<
 
         const launch = Effect.fn('Execution.launch')(function* (run: Run, repository: string) {
           const fiber = yield* execute(run, repository).pipe(
-            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
             Effect.ensuring(
               Effect.sync(() => {
                 workers.delete(run.taskId);
@@ -304,7 +280,7 @@ export class Execution extends Context.Service<
             if (!task || !repository) {
               return yield* new PipesError({ message: 'Task or repository not found.' });
             }
-            const previous = snapshot.runs?.find((run) => run.taskId === task.id);
+            const previous = snapshot.runs?.findLast((run) => run.taskId === task.id);
             if (
               previous &&
               (previous.handoffToken || !nextExecutionState(previous.status, 'start'))
@@ -313,7 +289,7 @@ export class Execution extends Context.Service<
                 message: 'This task already has a run. Inspect its result before further work.',
               });
             }
-            if (previous) {
+            if (previous && previous.status !== 'cancelled') {
               const run = new Run(transition(previous, 'start'));
               yield* Effect.uninterruptible(
                 Effect.gen(function* () {
@@ -323,17 +299,11 @@ export class Execution extends Context.Service<
               );
               return run;
             }
-            const output = yield* spawner.string(
-              ChildProcess.make(process.execPath, [
-                resolve(import.meta.dir, '../cli.ts'),
-                'config',
-                repository.path,
-              ]),
-            );
-            const configuration = yield* Schema.decodeEffect(Schema.fromJsonString(Config))(output);
+            const configuration = yield* environment.configuration(repository.path);
             const workflow =
               input.workflow ??
               task.workflow ??
+              previous?.workflow ??
               (Object.keys(configuration.workflows).length === 1
                 ? Object.keys(configuration.workflows)[0]
                 : undefined);
@@ -361,7 +331,7 @@ export class Execution extends Context.Service<
               taskId: task.id,
               title: task.title,
               workflow,
-              workspace: join(directory, 'worktrees', id),
+              workspace: environment.workspace(directory, id),
             });
             yield* Effect.uninterruptible(
               Effect.gen(function* () {
@@ -372,7 +342,6 @@ export class Execution extends Context.Service<
             return run;
           },
           starting.withPermit,
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
           Effect.mapError(failure),
         );
         const stop = Effect.fn('Execution.stop')(function* (taskId: string) {
@@ -398,7 +367,7 @@ export class Execution extends Context.Service<
           yield* cancelActive(taskId);
         }, starting.withPermit);
         const discard = Effect.fn('Execution.discard')(function* (taskId: string) {
-          const run = (yield* store.snapshot).runs?.find((run) => run.taskId === taskId);
+          const run = (yield* store.snapshot).runs?.findLast((run) => run.taskId === taskId);
           if (run?.handoffToken) {
             return yield* new PipesError({
               message: 'Close the interactive handoff before discarding this task.',
@@ -418,21 +387,12 @@ export class Execution extends Context.Service<
                   'This task cannot be claimed, or already has an interactive session. If its client crashed, confirm Codex has stopped and use pipes handoff-close --confirm-stopped.',
               });
             }
-            const attempt = run.attempts.at(-1);
-            const step = run.configuration.workflows[run.workflow]?.steps.find(
-              (step) => step.name === attempt?.step,
-            );
-            if (!attempt?.sessionId || step?.agent.command) {
-              return yield* new PipesError({
-                message:
-                  'No resumable bundled Codex session yet. Custom ACP commands cannot be resumed by the bundled CLI.',
-              });
-            }
+            yield* environment.handoffSession(run);
             if (workers.has(taskId)) {
               yield* stop(taskId);
-              run = (yield* store.snapshot).runs!.find((run) => run.taskId === taskId)!;
+              run = (yield* store.snapshot).runs!.findLast((run) => run.taskId === taskId)!;
             }
-            if ((!run.workerStopped && !confirmedStopped) || !existsSync(run.workspace)) {
+            if ((!run.workerStopped && !confirmedStopped) || !(yield* environment.exists(run))) {
               return yield* new PipesError({
                 message: `Cannot confirm the detached worker stopped or its worktree exists. After confirming the previous worker stopped, use pipes jump-in ${taskId} --confirm-stopped. No interactive writer was launched.`,
               });
@@ -443,6 +403,7 @@ export class Execution extends Context.Service<
                 message: 'Execution changed while stopping. Inspect its result before jumping in.',
               });
             }
+            const session = yield* environment.handoffSession(run);
             const id = crypto.randomUUID();
             const transcript = join(directory, 'artifacts', run.id, `${id}.jsonl`);
             yield* Effect.try({
@@ -459,11 +420,8 @@ export class Execution extends Context.Service<
               attempts: [
                 ...run.attempts,
                 {
-                  codexHome:
-                    latest.codexHome ??
-                    resolve(process.env.CODEX_HOME ?? join(homedir(), '.codex')),
+                  ...session,
                   id,
-                  sessionId: latest.sessionId,
                   status: 'interrupted',
                   step: latest.step,
                   transcript,
@@ -481,7 +439,7 @@ export class Execution extends Context.Service<
           Effect.uninterruptible,
         );
         const ownedRun = Effect.fn('Execution.ownedRun')(function* (taskId: string, token: string) {
-          const run = (yield* store.snapshot).runs?.find((run) => run.taskId === taskId);
+          const run = (yield* store.snapshot).runs?.findLast((run) => run.taskId === taskId);
           if (!run || run.status !== 'human_owned' || run.handoffToken !== token) {
             return yield* new PipesError({
               message: 'Interactive ownership no longer matches this session.',
@@ -540,5 +498,5 @@ export class Execution extends Context.Service<
           stop,
         });
       }),
-    ).pipe(Layer.provide(Environment.layer));
+    );
 }

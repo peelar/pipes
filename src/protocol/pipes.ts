@@ -20,6 +20,7 @@ const AgentChoice = Schema.Struct({ name: Schema.String, value: Schema.NonEmptyS
 export class CodexSettings extends Schema.Class<CodexSettings>('CodexSettings')({
   adapter: Schema.String,
   configurationExists: Schema.Boolean,
+  mcpInstalled: Schema.Boolean,
   model: Schema.NonEmptyString,
   models: Schema.Array(AgentChoice),
   reasoning: Schema.NonEmptyString,
@@ -102,6 +103,7 @@ export class Run extends Schema.Class<Run>('Run')({
   summary: Schema.String,
   taskId: Schema.String,
   title: Title,
+  updatedAt: Schema.optionalKey(Schema.String),
   workerStopped: Schema.optionalKey(Schema.Boolean),
   workflow: Schema.String,
   workspace: Schema.String,
@@ -155,7 +157,7 @@ export class PipesRpcs extends RpcGroup.make(
     success: Schema.Int,
   }),
   Rpc.make('codexProbe', { error: PipesError, payload: CodexProbe, success: CodexSettings }),
-  Rpc.make('codexSkillInstall', { error: PipesError, success: Schema.String }),
+  Rpc.make('codexInstall', { error: PipesError, success: Schema.String }),
   Rpc.make('codexSetup', {
     error: PipesError,
     payload: { agent: Agent, path: Schema.NonEmptyString },
@@ -222,7 +224,12 @@ export class PipesRpcs extends RpcGroup.make(
   }),
   Rpc.make('submit', {
     error: PipesError,
-    payload: { brief: Brief, repositoryId: Schema.NonEmptyString, title: Title },
+    payload: {
+      brief: Brief,
+      repositoryId: Schema.NonEmptyString,
+      title: Title,
+      workflow: Schema.optionalKey(Schema.NonEmptyString),
+    },
     success: Task,
   }),
   Rpc.make('shutdown', { success: Schema.Void }),

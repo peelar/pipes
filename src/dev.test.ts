@@ -49,7 +49,7 @@ test('dev applies pending migrations before opening the TUI on startup and watch
         Array.from(
           { length: count },
           (_, index) =>
-            `'000${index + 7}_dev_test': sql\`CREATE TABLE dev_migration_${index} (id INTEGER)\`,`,
+            `'000${index + 8}_dev_test': sql\`CREATE TABLE dev_migration_${index} (id INTEGER)\`,`,
         ).join('\n') + "'0001_queue':",
       );
     await writeFile(storePath, withMigrations(1));

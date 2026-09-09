@@ -70,6 +70,16 @@ export class Store extends Context.Service<
               yield* sql`INSERT INTO transitions SELECT * FROM transitions_old`;
               yield* sql`DROP TABLE transitions_old`;
             }),
+            '0007_successive_runs': Effect.gen(function* () {
+              yield* sql`CREATE TABLE runs_new (id TEXT PRIMARY KEY, taskId TEXT NOT NULL REFERENCES tasks(id), data TEXT NOT NULL)`;
+              yield* sql`CREATE TABLE run_events_new (id INTEGER PRIMARY KEY AUTOINCREMENT, runId TEXT NOT NULL REFERENCES runs_new(id), data TEXT NOT NULL, createdAt TEXT NOT NULL DEFAULT '')`;
+              yield* sql`INSERT INTO runs_new SELECT * FROM runs`;
+              yield* sql`INSERT INTO run_events_new SELECT * FROM run_events`;
+              yield* sql`DROP TABLE run_events`;
+              yield* sql`DROP TABLE runs`;
+              yield* sql`ALTER TABLE runs_new RENAME TO runs`;
+              yield* sql`ALTER TABLE run_events_new RENAME TO run_events`;
+            }),
           }),
         });
 
@@ -92,7 +102,7 @@ export class Store extends Context.Service<
                 runs,
                 tasks: tasks.map((task) => ({
                   ...task,
-                  status: runs.find((run) => run.taskId === task.id)?.status ?? task.status,
+                  status: runs.findLast((run) => run.taskId === task.id)?.status ?? task.status,
                 })),
                 transitions,
               });
@@ -188,7 +198,10 @@ export class Store extends Context.Service<
         });
 
         const saveRun = Effect.fn('Store.saveRun')(function* (input: Run, create = false) {
-          const run = yield* Schema.decodeEffect(Run)(input).pipe(Effect.mapError(databaseError));
+          const updatedAt = DateTime.formatIso(yield* DateTime.now);
+          const run = yield* Schema.decodeEffect(Run)({ ...input, updatedAt }).pipe(
+            Effect.mapError(databaseError),
+          );
           yield* sql
             .withTransaction(
               Effect.gen(function* () {
@@ -198,7 +211,7 @@ export class Store extends Context.Service<
                 } else {
                   yield* sql`UPDATE runs SET data = ${data} WHERE id = ${run.id}`;
                 }
-                yield* sql`INSERT INTO run_events ${sql.insert({ createdAt: DateTime.formatIso(yield* DateTime.now), data, runId: run.id })}`;
+                yield* sql`INSERT INTO run_events ${sql.insert({ createdAt: updatedAt, data, runId: run.id })}`;
               }),
             )
             .pipe(Effect.tapError(Effect.logError), Effect.mapError(databaseError));

@@ -30,14 +30,34 @@ export const codexSkillPath = (home = homedir()) =>
 
 export const codexSkillInstalled = (home = homedir()) => existsSync(codexSkillPath(home));
 
-export const installCodexSkill = Effect.fn('installCodexSkill')(function* (home = homedir()) {
+const codexCommand = fileURLToPath(import.meta.resolve('@openai/codex/bin/codex.js'));
+const pipesCommand = fileURLToPath(new URL('../cli.ts', import.meta.url));
+const codexMcp = (home: string, args: Array<string>) =>
+  ChildProcess.make(process.execPath, [codexCommand, 'mcp', ...args], {
+    env: { CODEX_HOME: join(home, '.codex') },
+    extendEnv: true,
+  });
+
+export const codexMcpInstalled = Effect.fn('codexMcpInstalled')(function* (home = homedir()) {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  return yield* spawner.string(codexMcp(home, ['get', 'pipes', '--json'])).pipe(
+    Effect.flatMap(
+      Schema.decodeEffect(Schema.fromJsonString(Schema.Struct({ name: Schema.Literal('pipes') }))),
+    ),
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+  );
+});
+
+export const installCodex = Effect.fn('installCodex')(function* (home = homedir()) {
   const filename = codexSkillPath(home);
   yield* Effect.tryPromise({
     catch: (error) =>
       new PipesError({
-        message: `Could not install the Pipes skill at ${filename}: ${String(error)}`,
+        message: `Could not install Pipes for Codex: ${String(error)}`,
       }),
     try: async () => {
+      await mkdir(join(home, '.codex'), { recursive: true });
       await mkdir(dirname(filename), { recursive: true });
       try {
         await writeFile(
@@ -52,6 +72,20 @@ export const installCodexSkill = Effect.fn('installCodexSkill')(function* (home 
       }
     },
   });
+  if (!(yield* codexMcpInstalled(home))) {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    yield* spawner
+      .string(codexMcp(home, ['add', 'pipes', '--', process.execPath, pipesCommand, 'mcp']))
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new PipesError({ message: `Could not install the Pipes MCP server: ${String(error)}` }),
+        ),
+      );
+    if (!(yield* codexMcpInstalled(home))) {
+      return yield* new PipesError({ message: 'Could not install the Pipes MCP server.' });
+    }
+  }
   return filename;
 });
 
@@ -126,6 +160,7 @@ export const openCodex = Effect.fn('openCodex')(function* (
     ),
     (connection) => Effect.sync(() => connection.close()),
   );
+  const mcpInstalled = yield* codexMcpInstalled();
   const result = yield* Effect.tryPromise({
     catch: acpError,
     try: async () => {
@@ -171,7 +206,8 @@ export const openCodex = Effect.fn('openCodex')(function* (
         adapter: initialized.agentInfo
           ? `${initialized.agentInfo.name} ${initialized.agentInfo.version}`
           : 'Codex ACP',
-        configurationExists: existsSync(resolve(request.path, '.pipes/pipes.ts')),
+        configurationExists: existsSync(resolve(request.path, '.pipes/config.ts')),
+        mcpInstalled,
         model: model.currentValue,
         models: model.choices,
         reasoning: reasoning.currentValue,
@@ -241,7 +277,7 @@ export const setupCodex = Effect.fn('setupCodex')(
         },
       },
     });
-    const filename = join(root, '.pipes/pipes.ts');
+    const filename = join(root, '.pipes/config.ts');
     yield* Effect.tryPromise({
       catch: () =>
         new PipesError({

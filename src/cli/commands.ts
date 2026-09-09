@@ -144,7 +144,7 @@ export const handoffClose = Command.make(
       });
     }
     const client = yield* connect;
-    const run = (yield* client.snapshot()).runs?.find((run) => run.taskId === taskId);
+    const run = (yield* client.snapshot()).runs?.findLast((run) => run.taskId === taskId);
     if (!run?.handoffToken) {
       return yield* new PipesError({ message: 'No interactive session lock for this task.' });
     }

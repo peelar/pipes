@@ -19,7 +19,7 @@ A personal software factory that organizes incoming work and runs it through cod
 - A background server that stays running when you close the UI.
 - Workflows defined in TypeScript, with agent, model, and reasoning settings for each step.
 - Guided Codex connection setup.
-- Planned: agent execution in Git worktrees, GitHub issue intake, and MCP access.
+- Agent execution in Git worktrees, GitHub issue intake, and MCP access.
 - Planned: human review and follow-up runs before accepting finished work.
 
 ## Run
@@ -39,5 +39,7 @@ bun run pipes agent login
 
 Follow the setup prompts, connect a repository, and press `[n]` to add a task.
 Press `[q]` to close the UI. Stop the background server with `bun run pipes shutdown`.
+
+Connect an MCP client to `bun run pipes mcp` over stdio.
 
 Run development checks with `bun run check`.

@@ -9,22 +9,33 @@ import { writeCodexFixture } from '../../test/codex-fixture';
 import { decodeConfig } from '../config';
 import {
   checkCodexConfig,
+  codexMcpInstalled,
   codexSkillInstalled,
   codexSkillPath,
-  installCodexSkill,
+  installCodex,
   probeCodex,
   setupCodex,
 } from './codex';
 
-test('Codex skill installation is detectable and never overwrites an existing skill', async () => {
+test('Codex integration installation is detectable and never overwrites existing setup', async () => {
   const home = mkdtempSync(join(tmpdir(), 'pipes-skill-test-'));
   expect(codexSkillInstalled(home)).toBe(false);
-  const filename = await Effect.runPromise(installCodexSkill(home));
+  expect(
+    await Effect.runPromise(codexMcpInstalled(home).pipe(Effect.provide(BunServices.layer))),
+  ).toBe(false);
+  const filename = await Effect.runPromise(
+    installCodex(home).pipe(Effect.provide(BunServices.layer)),
+  );
   expect(filename).toBe(codexSkillPath(home));
   expect(existsSync(filename)).toBe(true);
   expect(readFileSync(filename, 'utf8')).toContain('pipes --help');
+  expect(
+    await Effect.runPromise(codexMcpInstalled(home).pipe(Effect.provide(BunServices.layer))),
+  ).toBe(true);
   writeFileSync(filename, 'custom');
-  expect(await Effect.runPromise(installCodexSkill(home))).toBe(filename);
+  expect(await Effect.runPromise(installCodex(home).pipe(Effect.provide(BunServices.layer)))).toBe(
+    filename,
+  );
   expect(readFileSync(filename, 'utf8')).toBe('custom');
 });
 

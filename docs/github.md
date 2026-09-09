@@ -22,7 +22,7 @@ picker to change those grants later.
 
 ## Manual configuration
 
-Add `github` to your repository's existing `.pipes/pipes.ts` export:
+Add `github` to your repository's existing `.pipes/config.ts` export:
 
 ```ts
 github: {

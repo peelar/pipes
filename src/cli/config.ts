@@ -10,7 +10,7 @@ export const config = Command.make(
   'config',
   { path: Argument.string('path').pipe(Argument.withDefault('.')) },
   Effect.fn(function* ({ path }) {
-    const filename = resolve(path, '.pipes/pipes.ts');
+    const filename = resolve(path, '.pipes/config.ts');
     const module = yield* Effect.tryPromise({
       catch: (error) => new PipesError({ message: `Cannot load ${filename}: ${String(error)}` }),
       try: () => import(pathToFileURL(filename).href),
@@ -24,7 +24,7 @@ export const config = Command.make(
     if (existsSync(githubFile)) {
       if (resolved.github) {
         return yield* new PipesError({
-          message: 'Define GitHub intake in pipes.ts or github.ts, not both.',
+          message: 'Define GitHub intake in config.ts or github.ts, not both.',
         });
       }
       const github = yield* Effect.tryPromise({

@@ -14,6 +14,7 @@ import { CodexSetup } from './codex-setup';
 import { taskActions } from '../protocol/execution-state';
 import { Conversation } from './conversation';
 import { jumpIn } from '../client/jump-in';
+import { ConfirmationAlert, type DestructiveAction } from './confirmation-alert';
 
 type Runtime = ReturnType<typeof makeRuntime>;
 const makeRuntime = (connection: Connection) =>
@@ -170,7 +171,7 @@ function Manage({
 }
 
 function selectedRun(snapshot: Snapshot, selected: number) {
-  return snapshot.runs?.find((run) => run.taskId === snapshot.tasks[selected]?.id);
+  return snapshot.runs?.findLast((run) => run.taskId === snapshot.tasks[selected]?.id);
 }
 
 export const statusVisuals = {
@@ -344,6 +345,7 @@ export function App({
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [manage, setManage] = useState(false);
+  const [confirmation, setConfirmation] = useState<DestructiveAction>();
   const [connectionPath, setConnectionPath] = useState<string>();
   const [onboarding, setOnboarding] = useState(() => initialOnboarding(onboardingDirectory));
   const brief = useRef<TextareaRenderable>(null);
@@ -357,7 +359,7 @@ export function App({
     connected,
     mode === 'queue' && !manage && !onboarding,
   );
-  const modal = [onboarding, suggestedRoot, manage].find(Boolean);
+  const modal = [onboarding, suggestedRoot, manage, confirmation].find(Boolean);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -416,7 +418,11 @@ export function App({
     if (key.name === 's' && actions.start) {
       save(Effect.flatMap(Client, (client) => client.start({ taskId: task.id })));
     } else if (key.name === 'x' && actions.cancel) {
-      save(Effect.flatMap(Client, (client) => client.cancel({ taskId: task.id })));
+      setConfirmation({
+        action: 'Cancel task',
+        message: 'This stops its active work. The workspace and evidence are preserved.',
+        run: () => save(Effect.flatMap(Client, (client) => client.cancel({ taskId: task.id }))),
+      });
     } else if (key.name === 'j' && actions.jumpIn) {
       save(
         Effect.tryPromise({
@@ -427,7 +433,11 @@ export function App({
     } else if (key.name === 'v' && run) {
       setMode('conversation');
     } else if (key.name === 'd' && actions.discard) {
-      save(Effect.flatMap(Client, (client) => client.discard({ taskId: task.id })));
+      setConfirmation({
+        action: 'Discard task',
+        message: 'This removes the task from the queue while preserving its stored history.',
+        run: () => save(Effect.flatMap(Client, (client) => client.discard({ taskId: task.id }))),
+      });
     }
   });
 
@@ -582,6 +592,10 @@ export function App({
       <box border={['top']} borderColor="#585b70" flexShrink={0} paddingTop={1} width="100%">
         <text fg="#a6adc8">[m] manage [q] quit</text>
       </box>
+      <ConfirmationAlert
+        destructiveAction={confirmation}
+        onClose={() => setConfirmation(undefined)}
+      />
       {mode === 'conversation' && task && (
         <Conversation
           onClose={() => setMode('queue')}

@@ -14,6 +14,8 @@ The sections below are agreed unless marked otherwise. Example keyboard shortcut
 
 Pipes is a local-first, open-source personal software factory for engineering work. It turns existing coding agents and developer tools into a persistent production system.
 
+Human attention is the scarce resource Pipes optimizes. Automate the routine parts of the software-development lifecycle, keep autonomous work moving without supervision, and make the points that require judgment obvious and information-complete.
+
 It is single-player first. One person's server manages work across explicitly registered repositories. Work is the central abstraction; agents are replaceable workers.
 
 Pipes has a terminal control surface, not an IDE or GUI. It hands work to coding harnesses, editors, terminals, browsers, and Git tools.
@@ -58,7 +60,7 @@ Code-defined workflows are reusable entry points, not only source-triggered auto
 Use ordinary TypeScript exports and imports for reuse. Steps are declared within workflows; there is no separate managed pipe or profile registry.
 
 Configuration is declarative: plain objects describe workflows and their ordered steps. `plan → implement → review` is an editable example, not a built-in execution mode.
-The repository configuration entry point is `.pipes/pipes.ts`.
+The repository configuration entry point is `.pipes/config.ts`.
 
 Each step defines an agent provider (such as `codex`), model, reasoning setting, and static prompt. Pipes resolves the provider to its ACP adapter and launch arguments; ACP is an implementation detail. A custom command is an optional advanced override. Pipes supplies standard context: the captured task request, feedback, previous results, and artifact references. Each step starts a fresh agent session. Files and explicit results carry work between steps; full transcripts are retained as evidence rather than automatically fed into every prompt.
 
@@ -80,6 +82,8 @@ Completion advances the chain. Blockage or failure stops progression. A user can
 
 A successful run awaits human acceptance. Acceptance closes the task as verified and finished locally. Publishing, merging, and pushing remain the user's work. MCP does not accept tasks on the user's behalf.
 
+Pipes cannot force an arbitrary interactive harness to follow a workflow. It enforces the boundary it owns instead: claiming work grants a capability scoped to the exact task, run, step, and attempt; only the current owner can return its outcome; and Pipes advances the workflow only after that explicit outcome. Closing a harness, editing the workspace, or writing a final message does not advance work. Stale capabilities are rejected and only one writer may own a step at a time.
+
 If a result needs changes, record feedback and create a follow-up run from the previous result. Preserve the earlier run's record. Editing a task brief does not redirect active execution: show the change and let the user finish or stop the run before starting a follow-up.
 
 Unwanted tasks can be dismissed. Stop active work, preserve history, and remove them from the default queue. Dismissal is distinct from success.
@@ -92,7 +96,7 @@ Initially, clients connect to a same-host server. A user can SSH to another mach
 
 Queue work oldest-first, with manual promotion. A configurable global limit controls concurrent agent invocations. Waiting, blocked, and human-owned steps do not occupy an agent slot.
 
-Pausing the factory allows active invocations to finish but starts no further steps. Source intake continues. Individual task cancellation is separate.
+Pausing the factory allows active invocations to finish but starts no further steps. Source intake continues. Individual task cancellation is separate. A cancelled task can be started again from scratch as a new run, preserving the cancelled run and its evidence.
 
 Execution is permissive by default. Pushing belongs to the user. Broader sandbox policy is not part of the initial product contract; the exact push restriction mechanism remains unspecified.
 
@@ -100,13 +104,17 @@ Execution is permissive by default. Pushing belongs to the user. Broader sandbox
 
 An environment is an explicit abstraction. It prepares a workspace, runs and stops commands or workers, retrieves files and artifacts, and describes how to access the workspace. Clients must not require every environment to expose a host-local path.
 
+Execution belongs to the environment so a future remote sandbox can run the same captured workflow without moving Pipes' task state or workflow decisions into the sandbox. Pipes owns scheduling, attempt ownership, result persistence, and progression; the environment owns worker launch, agent transport, result-endpoint connectivity, and process cleanup, including interactive launch. Interrupting an environment invocation must finish stopping its worker before checkpointing or granting another writer ownership. A lost connection alone cannot establish that a remote worker stopped.
+
+This is preparation for remote execution, not remote support. The current environment remains local. Remote environment identity and recovery, repository and evidence transfer, authentication, and remote terminal access remain deferred; local workspace and session metadata must not become requirements for future environments.
+
 The first implementation uses one Git worktree and branch per run. Fresh tasks start from a local branch or revision, optionally selected by `base`, recording the resolved commit. Do not automatically fetch a remote base. Follow-up runs start from the previous result.
 
 After execution stops, preserve project changes in a local Git checkpoint, including relevant uncommitted and untracked changes. Record its revision. Ignored environment files stay outside the checkpoint; larger evidence belongs in artifact storage. Nothing is pushed.
 
 Accepted results expose the branch, base revision, summary, and tool shortcuts. Pipes does not automatically merge or cherry-pick them into the user's normal checkout.
 
-Environment cleanup is explicit. Refuse cleanup of active or human-owned environments and preserve recorded results and evidence when cleaning up.
+After a successful run is checkpointed, Pipes cleans up its Git worktree while preserving the local branch, recorded revision, results, and evidence. Failed, cancelled, interrupted, and human-owned environments remain available for inspection. Cleanup refuses active or human-owned environments.
 
 ## Interactive handoff
 
@@ -136,13 +144,13 @@ Lease expiration signals uncertainty, not proof that a worker stopped. Confirm t
 
 The first TUI launch shows an animated Pipes logo before repository onboarding. Later launches skip it.
 
-A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/pipes.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through the Agent tab in [m] manage. Pipes includes its agent adapters and runtimes; users do not install Codex, ACP adapters, Node, or package managers separately. Authentication uses the user’s account through Pipes.
+A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/config.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through the Agent tab in [m] manage. Pipes includes its agent adapters and runtimes; users do not install Codex, ACP adapters, Node, or package managers separately. Authentication uses the user’s account through Pipes.
 
 The Codex connection step only checks availability and authentication, showing “Connected to Codex” on success. The separate configuration step shows a compact addition diff of the example configuration, with abbreviated agent settings and prompts, without repeating the connection status. Agent settings are defined per workflow step rather than for the connection.
 
 Codex connection setup uses the maintained `@agentclientprotocol/codex-acp` adapter. Discover model choices through ACP, apply the selected model, then refresh its reasoning choices and verify the selected settings. Connection checks do not send an agent assignment. Selected settings can create the starter repository configuration; preserve existing TypeScript configuration and show the settings to incorporate into it.
 
-Pipes provides a Codex skill for interactive use. The skill describes the behavioral rules for operating Pipes, but does not duplicate the CLI command surface. It directs Codex to discover the installed version's commands through `pipes --help` and command-specific help. The Agent view detects whether the skill is installed and, when it is missing, shows an action to install it.
+Pipes provides a Codex skill for interactive use. The skill describes the behavioral rules for operating Pipes, but does not duplicate the CLI command surface. It directs Codex to discover the installed version's commands through `pipes --help` and command-specific help. The Agent view detects whether the MCP server and skill are installed and, when either is missing, shows an action to install both without overwriting existing configuration.
 
 Repositories are registered explicitly through TUI or CLI. Check configuration and offer the starter workflow when missing. GitHub supplies work for registered repositories.
 
@@ -164,7 +172,13 @@ The TUI uses roughly the left third for the task queue and the right two-thirds 
 
 Results lead with changes, checks performed, unresolved concerns, and shortcuts to inspect the work. Attention stays inside Pipes initially; external and desktop notifications are deferred.
 
-CLI/JSON is the automation interface. MCP lets agents inspect work and evidence, submit tasks, start runs, claim and return steps, and submit feedback. TUI and CLI use the same server operations through Effect RPC; MCP adapts to the application capabilities.
+CLI/JSON is the automation interface. MCP is the primary work interface for agents; the TUI is the human control plane. TUI and CLI use the same server operations through Effect RPC; MCP adapts to the application capabilities.
+
+MCP answers attention-first questions with structured context. “What requires my attention?” returns only work Pipes cannot progress autonomously, why it stopped, the requested outcome and source, the current workflow position, prior step results, evidence references, and the valid next actions. “What was recently done?” returns recent outcomes and checks rather than raw activity. Detailed transcripts and artifacts are fetched on demand.
+
+An agent may submit an ad-hoc task and select a configured workflow through MCP. Submission and execution are distinct durable operations even when one tool performs both for convenience: a successfully admitted task remains visible if configuration validation or run startup fails. Runs execute detached from the MCP client and client disconnection does not cancel them.
+
+Interactive work entered through MCP must claim the current step before writing. The claim supplies the same assignment and evidence as an autonomous attempt. Returning `completed`, `blocked`, or `failed` releases ownership and lets Pipes apply the ordinary workflow transition; returning control without an outcome creates a fresh agent attempt. Acceptance, dismissal, publishing, merging, and pushing remain explicit human actions and are never inferred from conversation.
 
 Client disconnection ends observation, not durable work. Cancellation is an explicit server operation. GitHub webhook ingress is separate from privileged control operations.
 

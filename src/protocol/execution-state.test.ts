@@ -22,7 +22,8 @@ test('task actions and execution transitions distinguish cancellation from inter
     start: false,
   });
   expect(nextExecutionState('cancelling', 'stopped')).toBe('cancelled');
-  expect(nextExecutionState('cancelled', 'start')).toBeUndefined();
+  expect(nextExecutionState('cancelled', 'start')).toBe('queued');
+  expect(taskActions({ status: 'cancelled' }).start).toBe(true);
   expect(nextExecutionState('running', 'start')).toBeUndefined();
   expect(nextExecutionState('awaiting_acceptance', 'cancel')).toBeUndefined();
   expect(nextExecutionState('interrupted', 'start')).toBe('queued');

@@ -377,7 +377,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
   const directory = mkdtempSync(join(tmpdir(), 'pipes-test-'));
   const seed = join(directory, 'pipes');
   mkdirSync(join(seed, '.pipes'), { recursive: true });
-  writeFileSync(join(seed, '.pipes/pipes.ts'), readFileSync('.pipes/pipes.ts'));
+  writeFileSync(join(seed, '.pipes/config.ts'), readFileSync('.pipes/config.ts'));
   expect(
     await Bun.spawn(['git', 'init', seed], { stderr: 'ignore', stdout: 'ignore' }).exited,
   ).toBe(0);
@@ -725,7 +725,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     expect(await reset().exited).toBe(0);
     expect(existsSync(join(directory, 'pipes.sqlite'))).toBe(false);
     expect(existsSync(join(directory, 'onboarding.json'))).toBe(false);
-    expect(existsSync(join(first, '.pipes/pipes.ts'))).toBe(false);
+    expect(existsSync(join(first, '.pipes/config.ts'))).toBe(false);
     expect(await reset().exited).toBe(0);
     expect(await list()).toEqual(
       new Snapshot({ repositories: [], runs: [], tasks: [], transitions: [] }),

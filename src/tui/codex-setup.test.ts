@@ -6,6 +6,7 @@ test('setup guards pending actions and recovers through retry before creation', 
   const settings = new CodexSettings({
     adapter: 'test',
     configurationExists: false,
+    mcpInstalled: false,
     model: 'small',
     models: [],
     reasoning: 'low',
@@ -24,7 +25,9 @@ test('setup guards pending actions and recovers through retry before creation', 
   expect(state.status).toBe('installing');
   state = transitionSetup(state, { type: 'installed' });
   expect(state.status).toBe('connected');
-  expect('settings' in state && state.settings.skillInstalled).toBe(true);
+  expect('settings' in state && state.settings.mcpInstalled && state.settings.skillInstalled).toBe(
+    true,
+  );
   state = key('return');
   expect(key('b')).toEqual({ phase: 'connection', status: 'checking' });
   expect(key('c')).toBe(state);
@@ -50,6 +53,7 @@ test('setup offers validation without creation for an existing configuration', (
   const settings = new CodexSettings({
     adapter: 'test',
     configurationExists: true,
+    mcpInstalled: true,
     model: 'small',
     models: [],
     reasoning: 'low',

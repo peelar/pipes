@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import example from '../.pipes/pipes';
+import example from '../.pipes/config';
 import { decodeConfig } from './config';
 
 test('configuration validates the example and rejects malformed workflow settings', async () => {
@@ -55,7 +55,7 @@ test('configuration validates the example and rejects malformed workflow setting
   try {
     await mkdir(join(directory, '.pipes'));
     await writeFile(
-      join(directory, '.pipes/pipes.ts'),
+      join(directory, '.pipes/config.ts'),
       `export default ${JSON.stringify(example)};`,
     );
     const child = Bun.spawn([process.execPath, 'src/cli.ts', 'config', directory], {

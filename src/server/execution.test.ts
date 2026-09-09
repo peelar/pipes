@@ -1,15 +1,16 @@
 import { expect, test } from 'bun:test';
 import { BunServices } from '@effect/platform-bun';
-import { Effect, Layer, ManagedRuntime, Stream } from 'effect';
+import { Deferred, Effect, Layer, ManagedRuntime, Stream } from 'effect';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeCodexFixture } from '../../test/codex-fixture';
 import { Client } from '../client/connection';
-import { resumeArguments } from '../client/jump-in';
+import { Environment, resumeArguments } from './environment';
 import { serve } from '../server';
 import { Run } from '../protocol/pipes';
 import { Store } from './store';
+import { Execution } from './execution';
 
 const git = async (cwd: string, ...args: Array<string>) => {
   const child = Bun.spawn(['git', '-C', cwd, ...args], { stderr: 'pipe', stdout: 'pipe' });
@@ -17,6 +18,127 @@ const git = async (cwd: string, ...args: Array<string>) => {
   expect(await child.exited).toBe(0);
   return output.trim();
 };
+
+test('execution uses the supplied environment and waits for its worker cleanup before checkpointing', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pipes-environment-'));
+  const events: Array<string> = [];
+  const release = Deferred.makeUnsafe<void>();
+  const configuration = {
+    setup: ['setup'],
+    workflows: {
+      work: {
+        steps: [
+          {
+            agent: { model: 'test', provider: 'codex' as const, reasoning: 'low' },
+            name: 'work',
+            prompt: 'Do the work',
+          },
+        ],
+      },
+    },
+  };
+  const environment = Environment.of({
+    checkpoint: () =>
+      Effect.sync(() => {
+        expect(events.at(-1)).toBe('worker stopped');
+        events.push('checkpoint');
+        return 'result-revision';
+      }),
+    cleanup: () =>
+      Effect.sync(() => {
+        events.push('cleanup');
+      }),
+    configuration: () => Effect.succeed(configuration),
+    execute: Effect.fn(function* (input) {
+      expect(input.path).toBe('sandbox://run/workspace');
+      expect(input.prompt).toContain('Do the work');
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          events.push('worker stopped');
+        }),
+      );
+      yield* input.session({ codexHome: '/sandbox/session', sessionId: 'session' });
+      input.update({ prompt: input.prompt });
+      yield* Effect.promise(() => input.report({ status: 'completed', summary: 'Result' }));
+      yield* Deferred.await(release);
+    }, Effect.scoped),
+    exists: () => Effect.succeed(false),
+    git: () => Effect.succeed('base-revision'),
+    handoffSession: () => Effect.die('Unexpected handoff'),
+    prepare: () =>
+      Effect.sync(() => {
+        events.push('prepare');
+      }),
+    probe: () =>
+      Effect.sync(() => {
+        events.push('probe');
+      }),
+    resume: () => Effect.die('Unexpected resume'),
+    setup: () =>
+      Effect.sync(() => {
+        events.push('setup');
+      }),
+    workspace: () => 'sandbox://run/workspace',
+  });
+  const runtime = ManagedRuntime.make(
+    Execution.layer(directory).pipe(
+      Layer.provide(Layer.succeed(Environment, environment)),
+      Layer.provideMerge(Store.layer(join(directory, 'pipes.sqlite'))),
+      Layer.provide(BunServices.layer),
+    ),
+  );
+  try {
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const store = yield* Store;
+        const execution = yield* Execution;
+        const repository = yield* store.register(process.cwd());
+        for (const cancel of [true, false]) {
+          events.length = 0;
+          const task = yield* store.submit({
+            brief: 'Work',
+            repositoryId: repository.id,
+            title: 'Test',
+          });
+          const run = yield* execution.start({ taskId: task.id });
+          const waitForRun = (predicate: (run: Run) => boolean) =>
+            store.watch.pipe(
+              Stream.map((snapshot) => snapshot.runs?.find((current) => current.id === run.id)),
+              Stream.filter((run): run is Run => !!run && predicate(run)),
+              Stream.take(1),
+              Stream.runCollect,
+              Effect.map((runs) => runs[0]!),
+              Effect.timeout('5 seconds'),
+            );
+          const reported = yield* waitForRun((run) => !!run.attempts[0]?.result);
+          expect(reported.status).toBe('running');
+          expect(events).toEqual(['probe', 'prepare', 'setup']);
+          if (cancel) {
+            yield* execution.cancel(task.id);
+          } else {
+            yield* Deferred.succeed(release, undefined);
+          }
+          const finished = yield* waitForRun((run) => run.workerStopped === true);
+          expect(finished.status).toBe(cancel ? 'cancelled' : 'awaiting_acceptance');
+          expect(finished.attempts[0]?.status).toBe(cancel ? 'interrupted' : 'completed');
+          expect(finished.revision).toBe('result-revision');
+          expect(readFileSync(finished.attempts[0]!.transcript, 'utf8')).toContain('Do the work');
+          expect(events).toEqual([
+            'probe',
+            'prepare',
+            'setup',
+            'worker stopped',
+            'checkpoint',
+            ...(cancel ? [] : ['cleanup']),
+          ]);
+        }
+      }),
+    );
+  } finally {
+    await runtime.dispose();
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
 
 test('server owns execution across client disconnects, validates outcomes, checkpoints, and stops workers', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pipes-execution-'));
@@ -49,7 +171,7 @@ test('server owns execution across client disconnects, validates outcomes, check
     runtime.runPromise(Effect.flatMap(Client, f));
   const configure = (mode: string, setup?: Array<string>) =>
     writeFileSync(
-      join(repository, '.pipes/pipes.ts'),
+      join(repository, '.pipes/config.ts'),
       `export default ${JSON.stringify({ setup, workflows: { work: { steps: ['implement', 'review'].map((name) => ({ agent: { command: [process.execPath, fixture, mode], model: 'large', provider: 'codex', reasoning: 'high' }, name, prompt: `Do ${name}` })) } } })};`,
     );
   const waitForRun = (id: string, predicate: (run: Run) => boolean) =>
@@ -109,7 +231,7 @@ test('server owns execution across client disconnects, validates outcomes, check
     expect(completed.attempts.map((attempt) => attempt.status)).toEqual(['completed', 'completed']);
     expect(completed.brief).toBe('Captured request');
     expect(completed.revision).toBeTruthy();
-    expect(await git(completed.workspace, 'status', '--porcelain')).toBe('');
+    expect(existsSync(completed.workspace)).toBe(false);
     expect(existsSync(join(repository, 'agent-change.txt'))).toBe(false);
     expect(readFileSync(completed.attempts[1]!.transcript, 'utf8')).toContain('Fixture result');
     expect(() => process.kill(Number(readFileSync(join(directory, 'pid'), 'utf8')), 0)).toThrow();
@@ -266,9 +388,19 @@ test('server owns execution across client disconnects, validates outcomes, check
     expect(cancelled.attempts).toHaveLength(1);
     expect(cancelled.attempts[0]?.status).toBe('interrupted');
     expect(() => process.kill(Number(readFileSync(join(directory, 'pid'), 'utf8')), 0)).toThrow();
-    await expect(call((client) => client.start({ taskId: cancellingTask.id }))).rejects.toThrow(
-      'already has a run',
+    configure('execute-missing');
+    const restartedCancellation = await call((client) =>
+      client.start({ taskId: cancellingTask.id }),
     );
+    expect(restartedCancellation.id).not.toBe(cancelling.id);
+    expect(restartedCancellation.workspace).not.toBe(cancelling.workspace);
+    expect(restartedCancellation.attempts).toHaveLength(0);
+    await waitForRun(restartedCancellation.id, (run) => run.status === 'failed');
+    expect(
+      (await call((client) => client.snapshot())).runs?.filter(
+        (run) => run.taskId === cancellingTask.id,
+      ),
+    ).toHaveLength(2);
     await expect(call((client) => client.cancel({ taskId: cancellingTask.id }))).rejects.toThrow(
       'Only ongoing',
     );

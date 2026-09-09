@@ -229,7 +229,7 @@ export class GitHub extends Context.Service<
           );
       });
       const configurationFor = Effect.fn('GitHub.configurationFor')(function* (path: string) {
-        if (!existsSync(resolve(path, '.pipes/pipes.ts'))) {
+        if (!existsSync(resolve(path, '.pipes/config.ts'))) {
           return undefined;
         }
         const output = yield* spawner.string(

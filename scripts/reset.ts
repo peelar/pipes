@@ -62,7 +62,7 @@ try {
   }
   if (onboarding) {
     const configDirectory = join(onboarding.path, '.pipes');
-    await rm(join(configDirectory, 'pipes.ts'), { force: true });
+    await rm(join(configDirectory, 'config.ts'), { force: true });
     await rmdir(configDirectory).catch(() => {});
   }
   await rm(onboardingFile, { force: true });

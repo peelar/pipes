@@ -136,14 +136,26 @@ test('selected task actions follow execution state and inspection captures keybo
     expect(events.pop()).toBe('resume');
     await press('x');
     await view.renderOnce();
+    expect(view.captureCharFrame()).toContain('Cancel task?');
+    expect(events).toEqual(['start']);
+    await press('n');
+    expect(events).toEqual(['start']);
+    await press('x');
+    await press('y');
+    await view.renderOnce();
     expect(events).toEqual(['start', 'cancel']);
     expect(view.captureCharFrame()).toContain('cancelled');
     expect(view.captureCharFrame()).not.toContain('[x] cancel');
     await press('s');
-    expect(events).toEqual(['start', 'cancel']);
+    expect(events).toEqual(['start', 'cancel', 'start']);
+    expect(view.captureCharFrame()).toContain('[x] cancel');
     await press('d');
     await view.renderOnce();
-    expect(events).toEqual(['start', 'cancel', 'discard']);
+    expect(view.captureCharFrame()).toContain('Discard task?');
+    expect(events).toEqual(['start', 'cancel', 'start']);
+    await press('y');
+    await view.renderOnce();
+    expect(events).toEqual(['start', 'cancel', 'start', 'discard']);
     expect(view.captureCharFrame()).toContain('No tasks yet.');
   } finally {
     await act(async () => view.renderer.destroy());

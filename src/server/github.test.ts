@@ -6,7 +6,7 @@ import { createHmac } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import example from '../../.pipes/pipes';
+import example from '../../.pipes/config';
 import { decodeConfig, githubRepository } from '../config';
 import { GitHub, eligible, validSignature } from './github';
 import { Store } from './store';
@@ -78,7 +78,7 @@ test('GitHub connection validates remotes, preserves config, imports, and reuses
   try {
     await mkdir(join(source, '.pipes'), { recursive: true });
     const original = `// Keep this comment and ordinary TypeScript.\nconst config = ${JSON.stringify(example)};\nexport default config;\n`;
-    await writeFile(join(source, '.pipes/pipes.ts'), original);
+    await writeFile(join(source, '.pipes/config.ts'), original);
     await writeFile(
       process.env.GIT_CONFIG_GLOBAL,
       `[url "file://${source}"]\n  insteadOf = https://github.com/owner/repo.git\n`,
@@ -111,11 +111,11 @@ test('GitHub connection validates remotes, preserves config, imports, and reuses
     });
     const cloned = await runtime.runPromise(github.clone(policy.repository, directory));
     expect(cloned).toBe(join(directory, 'repositories/owner/repo'));
-    expect(await readFile(join(cloned, '.pipes/pipes.ts'), 'utf8')).toBe(original);
+    expect(await readFile(join(cloned, '.pipes/config.ts'), 'utf8')).toBe(original);
     expect(await readFile(join(cloned, '.git/config'), 'utf8')).not.toContain('test-only-token');
     expect(await runtime.runPromise(github.clone(policy.repository, directory))).toBe(cloned);
     const repository = await runtime.runPromise(github.attach({ path: cloned, ...policy }));
-    expect(await readFile(join(cloned, '.pipes/pipes.ts'), 'utf8')).toBe(original);
+    expect(await readFile(join(cloned, '.pipes/config.ts'), 'utf8')).toBe(original);
     const sidecar = await readFile(join(cloned, '.pipes/github.ts'), 'utf8');
     expect((await runtime.runPromise(github.inspect(cloned))).policy).toEqual(policy);
     expect((await runtime.runPromise(github.attach({ path: cloned, ...policy }))).id).toBe(
@@ -132,7 +132,7 @@ test('GitHub connection validates remotes, preserves config, imports, and reuses
     expect(snapshot.tasks).toHaveLength(1);
     expect(snapshot.tasks[0]?.workflow).toBe(policy.workflow);
     await writeFile(
-      join(cloned, '.pipes/pipes.ts'),
+      join(cloned, '.pipes/config.ts'),
       `export default ${JSON.stringify({ ...example, github: policy })};`,
     );
     await expect(runtime.runPromise(github.inspect(cloned))).rejects.toThrow();
@@ -245,7 +245,7 @@ test('GitHub import paginates, preserves snapshots across restart and verifies w
   try {
     await mkdir(join(directory, '.pipes'));
     await writeFile(
-      join(directory, '.pipes/pipes.ts'),
+      join(directory, '.pipes/config.ts'),
       `export default ${JSON.stringify({ ...example, github: policy })};`,
     );
     expect(
