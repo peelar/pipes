@@ -15,8 +15,8 @@ import { join } from 'node:path';
 import { act, useState } from 'react';
 import { writeCodexFixture } from '../../test/codex-fixture';
 import { Client, requireSupportedBun } from '../client/connection';
-import { Repository, Snapshot } from '../protocol/pipes';
-import { App } from './app';
+import { Repository, Run, Snapshot, Task } from '../protocol/pipes';
+import { App, StatusText, statusVisuals, TaskDetails, workflowProgress } from './app';
 import { CodexSetup } from './codex-setup';
 import { readOnboarding } from './onboarding';
 import { completePath, directories, expandPath, gitRoot } from './repository-picker';
@@ -168,6 +168,211 @@ test('unsupported Bun fails with upgrade instructions before server startup', ()
   expect(() => requireSupportedBun('1.10.0')).not.toThrow();
 });
 
+function Statuses() {
+  const [running, setRunning] = useState(true);
+  useKeyboard(() => setRunning(false));
+  return (
+    <box flexDirection="column">
+      {Object.keys(statusVisuals)
+        .filter((status) => status !== 'running')
+        .map((status) => (
+          <StatusText key={status} status={status as keyof typeof statusVisuals} />
+        ))}
+      <StatusText status={running ? 'running' : 'completed'} />
+    </box>
+  );
+}
+
+test('statuses pair glyphs with labels and animate only while running', async () => {
+  const view = await testRender(<Statuses />, { height: 20, width: 60 });
+  try {
+    await view.flush();
+    const before = view.captureCharFrame();
+    for (const visual of Object.values(statusVisuals)) {
+      expect(before).toContain(`${visual.icon} ${visual.label}`);
+    }
+    await act(async () => {
+      await Bun.sleep(100);
+    });
+    await view.flush();
+    expect(view.captureCharFrame()).not.toBe(before);
+    await act(async () => {
+      view.mockInput.pressKey('x');
+    });
+    await view.flush();
+    const stopped = view.captureCharFrame();
+    expect(stopped).not.toContain('running');
+    await act(async () => {
+      await Bun.sleep(100);
+    });
+    await view.flush();
+    expect(view.captureCharFrame()).toBe(stopped);
+  } finally {
+    await act(async () => {
+      view.renderer.destroy();
+    });
+  }
+});
+
+test('workflow progress shows ordered steps and their latest state', () => {
+  const agent = { model: 'small', provider: 'codex' as const, reasoning: 'low' };
+  expect(
+    workflowProgress({
+      attempts: [
+        { id: 'old', status: 'interrupted', step: 'plan', transcript: '' },
+        { id: 'new', status: 'completed', step: 'plan', transcript: '' },
+      ],
+      configuration: {
+        workflows: {
+          delivery: {
+            steps: [
+              { agent, name: 'plan', prompt: 'Plan the work.' },
+              { agent, name: 'build', prompt: 'Build it.' },
+            ],
+          },
+        },
+      },
+      workflow: 'delivery',
+    }),
+  ).toEqual([
+    { name: 'plan', status: 'completed' },
+    { name: 'build', status: 'waiting' },
+  ]);
+});
+
+test('task tracking leads with state and collapses content and repeated evidence', async () => {
+  const task = new Task({
+    brief: `${'A long request that wraps across the terminal. '.repeat(15)}\nHidden ending`,
+    createdAt: '2026-09-09T10:00:00Z',
+    id: 'task-id',
+    repositoryId: 'repo',
+    status: 'interrupted',
+    title: 'Track this task',
+  });
+  const run = new Run({
+    attempts: [
+      {
+        id: 'attempt',
+        result: { status: 'failed', summary: 'Worker stopped.' },
+        status: 'interrupted',
+        step: 'plan',
+        transcript: '/evidence/transcript.jsonl',
+      },
+    ],
+    baseRevision: 'base',
+    branch: 'work-branch',
+    brief: task.brief,
+    configuration: {
+      workflows: {
+        delivery: {
+          steps: [
+            {
+              agent: { model: 'small', provider: 'codex', reasoning: 'low' },
+              name: 'plan',
+              prompt: 'Plan.',
+            },
+          ],
+        },
+      },
+    },
+    createdAt: '2026-09-09T11:00:00Z',
+    id: 'run-id',
+    status: 'interrupted',
+    summary: 'Worker stopped.',
+    taskId: task.id,
+    title: task.title,
+    workflow: 'delivery',
+    workspace: '/worktree',
+  });
+  const snapshot = new Snapshot({
+    repositories: [],
+    runs: [run],
+    tasks: [task],
+    transitions: [{ createdAt: task.createdAt, id: 1, kind: 'submitted', taskId: task.id }],
+  });
+  const view = await testRender(
+    <TaskDetails active repository="pipes" run={run} snapshot={snapshot} task={task} />,
+    { height: 45, width: 70 },
+  );
+  try {
+    await act(async () => {
+      await view.flush();
+    });
+    await view.flush();
+    const frame = view.captureCharFrame();
+    expect(frame).toContain('Ⅱ plan · interrupted');
+    expect(frame).not.toContain('Technical details');
+    expect(frame).not.toContain('[d]');
+    expect(frame).not.toContain('Hidden ending');
+    expect(frame).not.toContain('/evidence');
+    expect(frame.match(/Worker stopped\./g)).toHaveLength(1);
+    expect(frame.match(/delivery/g)).toHaveLength(1);
+    expect(frame).toContain('Description · [b] expand');
+    expect(frame).toContain('...');
+    expect(frame.match(/Ⅱ plan · interrupted/g)).toHaveLength(1);
+    expect(frame.indexOf('delivery')).toBeLessThan(frame.indexOf('Activity'));
+    expect(frame.indexOf('Worker stopped.')).toBeLessThan(frame.indexOf('Description'));
+    expect(frame.indexOf('Run started')).toBeLessThan(frame.indexOf('submitted'));
+    expect(
+      frame.split('\n').filter((line) => line.includes('A long request')).length,
+    ).toBeLessThanOrEqual(3);
+    await act(async () => {
+      view.mockInput.pressKey('b');
+      view.mockInput.pressKey('d');
+    });
+    await view.flush();
+    expect(view.captureCharFrame()).toContain('Hidden ending');
+    expect(view.captureCharFrame()).toContain('Description · [b] collapse');
+    expect(view.captureCharFrame()).not.toContain('...');
+    expect(view.captureCharFrame()).not.toContain('/evidence/transcript.jsonl');
+    await act(async () => {
+      view.mockInput.pressKey('b');
+      view.mockInput.pressKey('d');
+    });
+    await view.flush();
+    expect(view.captureCharFrame()).not.toContain('Hidden ending');
+    expect(view.captureCharFrame()).not.toContain('/evidence');
+  } finally {
+    await act(async () => {
+      view.renderer.destroy();
+    });
+  }
+});
+
+test('description ellipsis appears only when content is clipped', async () => {
+  for (const brief of ['Short description.', 'One\nTwo\nThree', 'One\nTwo\nThree\nFour']) {
+    const task = new Task({
+      brief,
+      createdAt: '',
+      id: 'task',
+      repositoryId: 'repo',
+      status: 'queued',
+      title: 'Task',
+    });
+    const view = await testRender(
+      <TaskDetails
+        active
+        repository="pipes"
+        run={undefined}
+        snapshot={new Snapshot({ repositories: [], tasks: [task], transitions: [] })}
+        task={task}
+      />,
+      { height: 30, width: 70 },
+    );
+    try {
+      await act(async () => {
+        await view.flush();
+      });
+      await view.flush();
+      expect(view.captureCharFrame().includes('...')).toBe(brief.includes('Four'));
+    } finally {
+      await act(async () => {
+        view.renderer.destroy();
+      });
+    }
+  }
+});
+
 test('CLI, live terminal queue, validation, and server restart share durable state', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pipes-test-'));
   const seed = join(directory, 'pipes');
@@ -266,6 +471,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     view = await testRender(
       <App
         onboardingDirectory={directory}
+        onJumpIn={async () => {}}
         onQuit={() => {}}
         runtime={runtime}
         startDirectory={nested}
@@ -305,6 +511,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     view = await testRender(
       <App
         onboardingDirectory={directory}
+        onJumpIn={async () => {}}
         onQuit={() => {}}
         runtime={runtime}
         startDirectory={nested}
@@ -363,6 +570,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     view = await testRender(
       <App
         onboardingDirectory={directory}
+        onJumpIn={async () => {}}
         onQuit={() => {}}
         runtime={runtime}
         startDirectory={nested}
@@ -371,16 +579,32 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     );
     await waitForAgent('● connected');
     expect(view.captureCharFrame()).not.toContain('Setup ·');
-    expect(view.captureCharFrame()).toContain('[c] connect');
+    expect(view.captureCharFrame()).toContain('[m] manage');
+    expect(view.captureCharFrame()).not.toContain('[↑↓] scroll');
     await act(async () => {
-      view!.mockInput.pressKey('c');
-      await Bun.sleep(100);
+      view!.mockInput.pressKey('m');
     });
+    await view.waitForFrame((frame) => frame.includes('Connections') && frame.includes('Agent'));
     await act(async () => {
-      await Bun.sleep(100);
+      view!.mockInput.pressKey('TAB');
     });
-    await view.waitForFrame((frame) => frame.includes('Git repository:'));
+    await view.waitForFrame((frame) => frame.includes('Checking Codex'));
+    expect(view.captureCharFrame()).toContain('Manage');
+    expect(view.captureCharFrame()).toContain('Connections');
+    await act(async () => {
+      view!.mockInput.pressKey('TAB');
+    });
+    await view.waitForFrame((frame) => frame.includes('Connect a repository'));
+    expect(view.captureCharFrame()).toContain('Manage');
     expect(view.captureCharFrame()).toContain('Connect this repository');
+    expect(view.captureCharFrame()).toContain('Browse local directories');
+    expect(view.captureCharFrame()).toContain('Clone from GitHub');
+    await act(async () => {
+      view!.mockInput.pressKey('ARROW_DOWN');
+      view!.mockInput.pressKey('RETURN');
+      await Bun.sleep(100);
+    });
+    await view.waitForFrame((frame) => frame.includes('Git repository'));
     await act(async () => {
       view!.mockInput.pressKey('ARROW_LEFT');
       await Bun.sleep(100);
@@ -402,7 +626,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
       await Bun.sleep(100);
     });
     await view.waitForFrame(
-      (frame) => frame.includes('Git repository:') && frame.includes('b project'),
+      (frame) => frame.includes('Git repository') && frame.includes('b project'),
     );
     await act(async () => {
       view!.mockInput.pressKey('ARROW_LEFT');
@@ -438,9 +662,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     await view.waitForFrame((frame) => !frame.includes('[Enter] selects'));
     expect((await list()).repositories).toHaveLength(3);
     await act(async () => {
-      view!.mockInput.pressKey('c');
-    });
-    await act(async () => {
+      view!.mockInput.pressKey('m');
       await Bun.sleep(100);
     });
     await act(async () => {
@@ -505,7 +727,9 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     expect(existsSync(join(directory, 'onboarding.json'))).toBe(false);
     expect(existsSync(join(first, '.pipes/pipes.ts'))).toBe(false);
     expect(await reset().exited).toBe(0);
-    expect(await list()).toEqual(new Snapshot({ repositories: [], tasks: [], transitions: [] }));
+    expect(await list()).toEqual(
+      new Snapshot({ repositories: [], runs: [], tasks: [], transitions: [] }),
+    );
   } finally {
     await act(async () => {
       view?.renderer.destroy();

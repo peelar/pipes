@@ -1,13 +1,32 @@
 import { expect, test } from 'bun:test';
 import { BunServices } from '@effect/platform-bun';
 import { Effect } from 'effect';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { writeCodexFixture } from '../../test/codex-fixture';
 import { decodeConfig } from '../config';
-import { checkCodexConfig, probeCodex, setupCodex } from './codex';
+import {
+  checkCodexConfig,
+  codexSkillInstalled,
+  codexSkillPath,
+  installCodexSkill,
+  probeCodex,
+  setupCodex,
+} from './codex';
+
+test('Codex skill installation is detectable and never overwrites an existing skill', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'pipes-skill-test-'));
+  expect(codexSkillInstalled(home)).toBe(false);
+  const filename = await Effect.runPromise(installCodexSkill(home));
+  expect(filename).toBe(codexSkillPath(home));
+  expect(existsSync(filename)).toBe(true);
+  expect(readFileSync(filename, 'utf8')).toContain('pipes --help');
+  writeFileSync(filename, 'custom');
+  expect(await Effect.runPromise(installCodexSkill(home))).toBe(filename);
+  expect(readFileSync(filename, 'utf8')).toBe('custom');
+});
 
 test('Codex probes negotiate settings, reject failures, clean up, and safely create a starter', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pipes-acp-test-'));

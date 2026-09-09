@@ -17,6 +17,7 @@ type Phase = 'connection' | 'workflow';
 type SetupState =
   | { phase: Phase; status: 'checking' }
   | { settings: CodexSettings; status: 'connected' | 'workflow' }
+  | { settings: CodexSettings; status: 'installing' }
   | { settings: CodexSettings; status: 'creating' }
   | { status: 'validating' }
   | { error: string; phase: Phase; status: 'failed' }
@@ -25,18 +26,51 @@ type SetupEvent =
   | { key: string; type: 'key' }
   | { settings: CodexSettings; type: 'connected' }
   | { error: string; type: 'failed' }
+  | { type: 'installed' }
   | { summary: string; type: 'done' };
 
 function setupPhase(state: SetupState): Phase {
-  return 'phase' in state ? state.phase : state.status === 'connected' ? 'connection' : 'workflow';
+  return 'phase' in state
+    ? state.phase
+    : state.status === 'connected' || state.status === 'installing'
+      ? 'connection'
+      : 'workflow';
 }
 
 const canCreate = (state: SetupState): state is { settings: CodexSettings; status: 'workflow' } =>
   state.status === 'workflow' && !state.settings.configurationExists;
 
+function transitionKey(state: SetupState, key: string, phase: Phase, pending: boolean): SetupState {
+  if (pending || state.status === 'done') {
+    return state;
+  }
+  switch (key) {
+    case 'return':
+      return state.status === 'connected'
+        ? { ...state, status: 'workflow' }
+        : canCreate(state)
+          ? { ...state, status: 'creating' }
+          : state.status === 'workflow'
+            ? { status: 'validating' }
+            : state;
+    case 'i':
+      return state.status === 'connected' && !state.settings.skillInstalled
+        ? { ...state, status: 'installing' }
+        : state;
+    case 'r':
+      return { phase, status: 'checking' };
+    case 'b':
+      return phase === 'workflow' ? { phase: 'connection', status: 'checking' } : state;
+    case 'v':
+      return phase === 'workflow' ? { status: 'validating' } : state;
+    default:
+      return state;
+  }
+}
+
 export function transitionSetup(state: SetupState, event: SetupEvent): SetupState {
   const phase = setupPhase(state);
-  const pending = ['checking', 'creating', 'validating'].includes(state.status);
+  const pending = ['checking', 'creating', 'installing', 'validating'].includes(state.status);
   switch (event.type) {
     case 'connected':
       return state.status === 'checking'
@@ -44,41 +78,91 @@ export function transitionSetup(state: SetupState, event: SetupEvent): SetupStat
         : state;
     case 'failed':
       return pending ? { error: event.error, phase, status: 'failed' } : state;
+    case 'installed':
+      return state.status === 'installing'
+        ? { settings: { ...state.settings, skillInstalled: true }, status: 'connected' }
+        : state;
     case 'done':
       return ['creating', 'validating'].includes(state.status)
         ? { status: 'done', summary: event.summary }
         : state;
     case 'key':
-      if (pending || state.status === 'done') {
-        return state;
-      }
-      switch (event.key) {
-        case 'return':
-          return state.status === 'connected'
-            ? { ...state, status: 'workflow' }
-            : canCreate(state)
-              ? { ...state, status: 'creating' }
-              : state.status === 'workflow'
-                ? { status: 'validating' }
-                : state;
-        case 'r':
-          return { phase, status: 'checking' };
-        case 'b':
-          return phase === 'workflow' ? { phase: 'connection', status: 'checking' } : state;
-        case 'v':
-          return phase === 'workflow' ? { status: 'validating' } : state;
-        default:
-          return state;
-      }
+      return transitionKey(state, event.key, phase, pending);
   }
 }
 
+function SetupContent({ busy, state }: { busy: boolean; state: SetupState }) {
+  if (busy) {
+    const message =
+      state.status === 'installing'
+        ? 'Installing Pipes skill…'
+        : state.status === 'validating'
+          ? 'Validating configuration and its agent settings…'
+          : state.status === 'creating'
+            ? 'Verifying settings and creating starter…'
+            : 'Checking Codex…';
+    return <text fg="#f9e2af">{message}</text>;
+  }
+  if (state.status === 'failed') {
+    return <text fg="#f38ba8">{state.error}</text>;
+  }
+  if (state.status === 'done') {
+    return <text fg="#a6e3a1">✓ {state.summary}</text>;
+  }
+  if (state.status === 'workflow') {
+    return state.settings.configurationExists ? (
+      <text>.pipes/pipes.ts already exists. Validate it to finish setup.</text>
+    ) : (
+      <>
+        <text>We’ll create .pipes/pipes.ts with example pipes.</text>
+        <text fg="#a6adc8">Preview · agent settings and prompts abbreviated</text>
+        <diff
+          addedBg="#20302b"
+          addedContentBg="#20302b"
+          addedSignColor="#a6e3a1"
+          diff={`--- /dev/null
++++ b/.pipes/pipes.ts
+@@ -0,0 +1,11 @@
++ export default {
++   workflows: {
++     'plan-implement-review': {
++       steps: [
++         { name: 'plan', agent: …, prompt: … },
++         { name: 'implement', agent: …, prompt: … },
++         { name: 'review', agent: …, prompt: … },
++       ],
++     },
++   },
++ };`}
+          filetype="typescript"
+          showLineNumbers={false}
+          syntaxStyle={syntaxStyle}
+          view="unified"
+        />
+      </>
+    );
+  }
+  if (!('settings' in state)) {
+    return null;
+  }
+  return (
+    <>
+      <text fg="#a6e3a1">✓ Connected to Codex</text>
+      <text fg={state.settings.skillInstalled ? '#a6e3a1' : '#f9e2af'}>
+        {state.settings.skillInstalled ? '✓ Pipes skill installed' : '○ Pipes skill not installed'}
+      </text>
+    </>
+  );
+}
+
 export function CodexSetup({
+  embedded = false,
   onClose,
   onReady,
   path,
   runtime,
 }: {
+  embedded?: boolean;
   onClose: () => void;
   onReady?: (summary: string) => void;
   path: string;
@@ -89,13 +173,14 @@ export function CodexSetup({
     status: 'checking',
   });
   const phase = setupPhase(state);
-  const busy = ['checking', 'creating', 'validating'].includes(state.status);
+  const busy = ['checking', 'creating', 'installing', 'validating'].includes(state.status);
   const ready = useEffectEvent((summary: string) => onReady?.(summary));
 
   useEffect(() => {
     if (
       state.status !== 'checking' &&
       state.status !== 'creating' &&
+      state.status !== 'installing' &&
       state.status !== 'validating'
     ) {
       return;
@@ -106,6 +191,8 @@ export function CodexSetup({
         Effect.gen(function* () {
           const client = yield* Client;
           switch (state.status) {
+            case 'installing':
+              return yield* client.codexSkillInstall();
             case 'validating':
               return yield* client.configCheck({ path });
             case 'creating':
@@ -128,6 +215,10 @@ export function CodexSetup({
           return;
         }
         if (typeof result === 'string') {
+          if (state.status === 'installing') {
+            dispatch({ type: 'installed' });
+            return;
+          }
           const summary = state.status === 'validating' ? result : `Created ${result}`;
           ready(summary);
           dispatch({ summary, type: 'done' });
@@ -153,74 +244,29 @@ export function CodexSetup({
 
   return (
     <box
-      alignItems="center"
-      height="100%"
-      justifyContent="center"
-      left={0}
-      position="absolute"
-      top={0}
+      alignItems={embedded ? undefined : 'center'}
+      flexGrow={embedded ? 1 : undefined}
+      height={embedded ? undefined : '100%'}
+      justifyContent={embedded ? undefined : 'center'}
+      left={embedded ? undefined : 0}
+      position={embedded ? undefined : 'absolute'}
+      top={embedded ? undefined : 0}
       width="100%"
-      zIndex={10}
+      zIndex={embedded ? undefined : 10}
     >
       <box
         backgroundColor="#1e1e2e"
-        border
+        border={!embedded}
         borderColor="#82aaff"
         flexDirection="column"
         gap={1}
         maxWidth={90}
         padding={1}
-        title={setupTitle(phase, Boolean(onReady))}
-        width="90%"
+        title={embedded ? undefined : setupTitle(phase, Boolean(onReady))}
+        width={embedded ? '100%' : '90%'}
       >
         <text fg="#a6adc8">{path}</text>
-        {busy ? (
-          <text fg="#f9e2af">
-            {state.status === 'validating'
-              ? 'Validating configuration and its agent settings…'
-              : state.status === 'creating'
-                ? 'Verifying settings and creating starter…'
-                : 'Checking Codex…'}
-          </text>
-        ) : state.status === 'failed' ? (
-          <text fg="#f38ba8">{state.error}</text>
-        ) : state.status === 'done' ? (
-          <text fg="#a6e3a1">✓ {state.summary}</text>
-        ) : state.status === 'workflow' ? (
-          state.settings.configurationExists ? (
-            <text>.pipes/pipes.ts already exists. Validate it to finish setup.</text>
-          ) : (
-            <>
-              <text>We’ll create .pipes/pipes.ts with example pipes.</text>
-              <text fg="#a6adc8">Preview · agent settings and prompts abbreviated</text>
-              <diff
-                addedBg="#20302b"
-                addedContentBg="#20302b"
-                addedSignColor="#a6e3a1"
-                diff={`--- /dev/null
-+++ b/.pipes/pipes.ts
-@@ -0,0 +1,11 @@
-+ export default {
-+   workflows: {
-+     'plan-implement-review': {
-+       steps: [
-+         { name: 'plan', agent: …, prompt: … },
-+         { name: 'implement', agent: …, prompt: … },
-+         { name: 'review', agent: …, prompt: … },
-+       ],
-+     },
-+   },
-+ };`}
-                filetype="typescript"
-                showLineNumbers={false}
-                syntaxStyle={syntaxStyle}
-                view="unified"
-              />
-            </>
-          )
-        ) : (
-          <text fg="#a6e3a1">✓ Connected to Codex</text>
-        )}
+        <SetupContent busy={busy} state={state} />
         <SetupShortcuts state={state} wizard={Boolean(onReady)} />
       </box>
     </box>
@@ -228,12 +274,13 @@ export function CodexSetup({
 }
 
 function SetupShortcuts({ state, wizard }: { state: SetupState; wizard: boolean }) {
-  const actions = ['return', 'v', 'b', 'r']
+  const actions = ['return', 'i', 'v', 'b', 'r']
     .filter((key) => transitionSetup(state, { key, type: 'key' }) !== state)
     .map(
       (key) =>
         ({
           b: '[b] back',
+          i: '[i] install skill',
           r: '[r] retry',
           return:
             state.status === 'workflow'

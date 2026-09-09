@@ -3,12 +3,15 @@ import {
   ndJsonStream,
   PROTOCOL_VERSION,
   type SessionConfigOption,
+  type McpServer,
+  type SessionNotification,
 } from '@agentclientprotocol/sdk';
 import { Effect, PlatformError, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Agent, decodeConfig } from '../config';
 import { CodexProbe, CodexSettings, PipesError } from '../protocol/pipes';
@@ -21,6 +24,36 @@ const acpError = (error: unknown) =>
       ? 'Codex needs authentication. Run pipes agent login in another terminal, then retry. For API-key authentication, configure the adapter environment before starting pipesd.'
       : `Codex connection failed: ${errorMessage(error) ? error.message : String(error)}`,
   });
+
+export const codexSkillPath = (home = homedir()) =>
+  join(home, '.agents', 'skills', 'pipes', 'SKILL.md');
+
+export const codexSkillInstalled = (home = homedir()) => existsSync(codexSkillPath(home));
+
+export const installCodexSkill = Effect.fn('installCodexSkill')(function* (home = homedir()) {
+  const filename = codexSkillPath(home);
+  yield* Effect.tryPromise({
+    catch: (error) =>
+      new PipesError({
+        message: `Could not install the Pipes skill at ${filename}: ${String(error)}`,
+      }),
+    try: async () => {
+      await mkdir(dirname(filename), { recursive: true });
+      try {
+        await writeFile(
+          filename,
+          await Bun.file(new URL('../../skills/pipes/SKILL.md', import.meta.url)).text(),
+          { flag: 'wx' },
+        );
+      } catch (error) {
+        if (!Schema.is(Schema.Struct({ code: Schema.Literal('EEXIST') }))(error)) {
+          throw error;
+        }
+      }
+    },
+  });
+  return filename;
+});
 
 function selector(options: ReadonlyArray<SessionConfigOption> | null | undefined, id: string) {
   const option = options?.find((item) => item.id === id);
@@ -36,7 +69,10 @@ function selector(options: ReadonlyArray<SessionConfigOption> | null | undefined
   return { choices, currentValue: option.currentValue };
 }
 
-export const probeCodex = Effect.fn('probeCodex')(function* (input: typeof CodexProbe.Type) {
+export const openCodex = Effect.fn('openCodex')(function* (
+  input: typeof CodexProbe.Type,
+  execution?: { mcpServers: Array<McpServer>; update: (notification: SessionNotification) => void },
+) {
   const request = yield* Schema.decodeEffect(CodexProbe)(input).pipe(Effect.mapError(acpError));
   const command = request.command ?? [
     process.execPath,
@@ -48,7 +84,7 @@ export const probeCodex = Effect.fn('probeCodex')(function* (input: typeof Codex
     .spawn(
       ChildProcess.make(command[0]!, command.slice(1), {
         cwd: resolve(request.path),
-        env: { INITIAL_AGENT_MODE: 'read-only' },
+        env: { INITIAL_AGENT_MODE: execution ? 'agent-full-access' : 'read-only' },
         extendEnv: true,
         forceKillAfter: '2 seconds',
         stdin: Stream.fromReadableStream({
@@ -77,8 +113,15 @@ export const probeCodex = Effect.fn('probeCodex')(function* (input: typeof Codex
   const connection = yield* Effect.acquireRelease(
     Effect.sync(() =>
       client({ name: 'pipes' })
-        .onRequest('session/request_permission', () => ({ outcome: { outcome: 'cancelled' } }))
-        .onNotification('session/update', () => {})
+        .onRequest('session/request_permission', ({ params }) => {
+          const option = execution && params.options.find((option) => option.kind === 'allow_once');
+          return {
+            outcome: option
+              ? { optionId: option.optionId, outcome: 'selected' as const }
+              : { outcome: 'cancelled' as const },
+          };
+        })
+        .onNotification('session/update', ({ params }) => execution?.update(params))
         .connect(ndJsonStream(outgoing.writable, incoming)),
     ),
     (connection) => Effect.sync(() => connection.close()),
@@ -96,7 +139,7 @@ export const probeCodex = Effect.fn('probeCodex')(function* (input: typeof Codex
       }
       const session = await connection.agent.request('session/new', {
         cwd: resolve(request.path),
-        mcpServers: [],
+        mcpServers: execution?.mcpServers ?? [],
       });
       let options = session.configOptions;
       for (const [id, value] of [
@@ -133,6 +176,8 @@ export const probeCodex = Effect.fn('probeCodex')(function* (input: typeof Codex
         models: model.choices,
         reasoning: reasoning.currentValue,
         reasoningOptions: reasoning.choices,
+        sessionId: session.sessionId,
+        skillInstalled: codexSkillInstalled(),
       };
     },
   }).pipe(
@@ -147,7 +192,14 @@ export const probeCodex = Effect.fn('probeCodex')(function* (input: typeof Codex
         ),
     }),
   );
-  return yield* Schema.decodeEffect(CodexSettings)(result).pipe(Effect.mapError(acpError));
+  const settings = yield* Schema.decodeEffect(CodexSettings)(result).pipe(
+    Effect.mapError(acpError),
+  );
+  return { connection, sessionId: result.sessionId, settings };
+});
+
+export const probeCodex = Effect.fn('probeCodex')(function* (input: typeof CodexProbe.Type) {
+  return (yield* openCodex(input)).settings;
 }, Effect.scoped);
 
 export const setupCodex = Effect.fn('setupCodex')(

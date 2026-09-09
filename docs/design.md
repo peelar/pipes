@@ -59,7 +59,6 @@ Use ordinary TypeScript exports and imports for reuse. Steps are declared within
 
 Configuration is declarative: plain objects describe workflows and their ordered steps. `plan → implement → review` is an editable example, not a built-in execution mode.
 The repository configuration entry point is `.pipes/pipes.ts`.
-The `base` setting is optional; resolution when omitted remains unspecified until execution is implemented.
 
 Each step defines an agent provider (such as `codex`), model, reasoning setting, and static prompt. Pipes resolves the provider to its ACP adapter and launch arguments; ACP is an implementation detail. A custom command is an optional advanced override. Pipes supplies standard context: the captured task request, feedback, previous results, and artifact references. Each step starts a fresh agent session. Files and explicit results carry work between steps; full transcripts are retained as evidence rather than automatically fed into every prompt.
 
@@ -111,13 +110,13 @@ Environment cleanup is explicit. Refuse cleanup of active or human-owned environ
 
 ## Interactive handoff
 
-The TUI is keyboard-first. Display keyboard shortcuts in brackets, with `[c] connect` for connecting repositories. A configured action such as `O` opens a task in a new terminal pane or window. Terminal launch configuration is separate from harness launch configuration.
+The TUI is keyboard-first. Display keyboard shortcuts in brackets. `[m] manage` opens a tabbed modal for repository connections and agent setup. Connections presents one choice list for the current repository, local directory browsing, and GitHub repositories; local and remote are not nested tabs. A configured action such as `O` opens a task in a new terminal pane or window. Terminal launch configuration is separate from harness launch configuration.
 
-Opening defaults to inspection. Claiming is a separate action: stop the current worker and confirm it has stopped before granting human ownership. Inspection must not rely only on prompt wording to prevent changes in supported harnesses.
+Jumping in means interactive takeover: stop the current worker and confirm it has stopped, then hold workflow progression while the human owns the step. For Codex, launch the actual bundled `codex resume` with the saved session ID in the run's worktree. Read-only conversation inspection is a separate action.
 
 Use the user's configured interactive harness, even if another provider performed the autonomous step. It uses its own configured settings while preserving the assignment and evidence.
 
-Launch the harness in the run's environment with Pipes MCP available and a short startup prompt identifying a handoff. The handoff identifies the exact task, run, step, and purpose. The harness retrieves the brief, step instructions, results, and artifact index through MCP. Do not depend on restoring the original agent conversation.
+Launch the harness in the run's environment with Pipes MCP available and a short startup prompt identifying a handoff. Resume the original conversation when the same harness supports it. Otherwise supply the assignment and evidence in a fresh session. The handoff identifies the exact task, run, step, and purpose. The harness retrieves the brief, step instructions, results, and artifact index through MCP.
 
 Closing the tool does not finish the step or release ownership. Explicitly return an outcome or return control for another agent attempt through TUI, CLI, or MCP. Final task acceptance remains human-owned.
 
@@ -137,23 +136,29 @@ Lease expiration signals uncertainty, not proof that a worker stopped. Confirm t
 
 The first TUI launch shows an animated Pipes logo before repository onboarding. Later launches skip it.
 
-A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/pipes.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through [a]. Pipes includes its agent adapters and runtimes; users do not install Codex, ACP adapters, Node, or package managers separately. Authentication uses the user’s account through Pipes.
+A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/pipes.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through the Agent tab in [m] manage. Pipes includes its agent adapters and runtimes; users do not install Codex, ACP adapters, Node, or package managers separately. Authentication uses the user’s account through Pipes.
 
 The Codex connection step only checks availability and authentication, showing “Connected to Codex” on success. The separate configuration step shows a compact addition diff of the example configuration, with abbreviated agent settings and prompts, without repeating the connection status. Agent settings are defined per workflow step rather than for the connection.
 
 Codex connection setup uses the maintained `@agentclientprotocol/codex-acp` adapter. Discover model choices through ACP, apply the selected model, then refresh its reasoning choices and verify the selected settings. Connection checks do not send an agent assignment. Selected settings can create the starter repository configuration; preserve existing TypeScript configuration and show the settings to incorporate into it.
 
+Pipes provides a Codex skill for interactive use. The skill describes the behavioral rules for operating Pipes, but does not duplicate the CLI command surface. It directs Codex to discover the installed version's commands through `pipes --help` and command-specific help. The Agent view detects whether the skill is installed and, when it is missing, shows an action to install it.
+
 Repositories are registered explicitly through TUI or CLI. Check configuration and offer the starter workflow when missing. GitHub supplies work for registered repositories.
+
+GitHub authentication uses the public [Pipes GitHub](https://github.com/apps/pipes-github) App through OAuth device flow. Pipes opens GitHub's installation UI so the user chooses each account and repository grant before authorization, and can manage those grants later. The installed client contains the app's public client ID but no client secret or private key. Pipes does not accept general user tokens, impersonate GitHub CLI, or depend on its credentials.
 
 For local registration, the TUI detects the repository containing its launch directory. If it is not registered, outside the first-time wizard, ask whether to connect it to Pipes, with explicit Yes/No choices in a centered modal over the main UI. The background remains visible but keyboard interaction stays in the modal. Declining continues without registration for that session; registered repositories are not prompted again. A keyboard directory picker supports browsing and typed paths with completion and home-directory expansion. Discovery does not register repositories automatically or scan the disk in the background.
 
-GitHub is a continuous source, alongside manual submission through Pipes interfaces. Each source owns its delivery mechanism, eligibility rules, and mapping to a registered repository and workflow. Sources submit through the same durable task admission boundary, whether they poll or receive webhooks; task execution does not depend on delivery. GitHub currently uses webhooks for continuous delivery. Users provide reachable webhook connectivity, such as an endpoint or tunnel. Pipes requires no Pipes-operated relay.
+GitHub is a continuous source, alongside manual submission through Pipes interfaces. Each source owns its delivery mechanism, eligibility rules, and mapping to a registered repository and workflow. Sources submit through the same durable task admission boundary, whether they poll or receive webhooks; task execution does not depend on delivery. GitHub polls every minute while the server runs and once on startup. Optional webhooks can accelerate delivery when the user provides reachable connectivity, such as an endpoint or tunnel. Pipes requires no Pipes-operated relay.
 
 When execution is implemented, code configuration will also determine whether admitted tasks start automatically. Manual callers can select a workflow directly.
 
 Future run and task lifecycle operations must preserve source deduplication: repeated observations must not create another run or reopen a closed task. Source synchronization and progress updates back to GitHub are deferred.
 
 ## Interfaces
+
+OpenCode is the visual inspiration for the TUI: restrained color, terminal-native iconography, and compact keyboard-first interactions. The selected-task view prioritizes tracking work over reading its description. Keep the pipes breakdown in the header's second column and avoid repeating information within the view.
 
 The TUI uses roughly the left third for the task queue and the right two-thirds for the selected task. Show steps, status, available live agent messages and tool activity, summaries, and evidence. The live view is read-only; direct agent conversation stays in the user's harness, apart from replies to blocked steps.
 
@@ -195,7 +200,7 @@ Support macOS and Linux; Windows users can use WSL. Ship an executable or releas
 - Automatic agent recovery loops and configurable agent retry policies.
 - Custom step-output schemas, deterministic workflow steps, and arbitrary code steps.
 - Child tasks and automatic task dependency scheduling.
-- Exact agent-session transfer and built-in editor integrations.
+- Session transfer between different providers and built-in editor integrations.
 - Automatic environment retention, login-service installation, and external notifications.
 
 ## Unspecified

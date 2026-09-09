@@ -9,10 +9,11 @@ export function writeCodexFixture(directory: string) {
     `#!${process.execPath}
 import { agent, ndJsonStream, RequestError } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'node_modules/@agentclientprotocol/sdk/dist/acp.js')).href)};
 import { Writable } from 'node:stream';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 const mode = process.argv[2] ?? 'ok';
 writeFileSync(${JSON.stringify(join(directory, 'pid'))}, String(process.pid));
 const record = (method, params) => appendFileSync(${JSON.stringify(join(directory, 'calls.jsonl'))}, JSON.stringify({ method, params }) + '\\n');
+let mcp;
 let model = 'small';
 let reasoning = 'low';
 const options = () => [
@@ -26,6 +27,7 @@ agent().onRequest('initialize', ({params}) => {
   return { protocolVersion: mode === 'version' ? 999 : 1, agentCapabilities: {}, agentInfo: {name: 'fixture', version: '1'} };
 }).onRequest('session/new', ({params}) => {
   record('session/new', params);
+  mcp = params.mcpServers[0];
   if (mode === 'auth') throw RequestError.authRequired();
   if (mode === 'malformed') return {sessionId: 42};
   return { sessionId: 'session', configOptions: mode === 'missing-options' ? [] : options() };
@@ -36,6 +38,22 @@ agent().onRequest('initialize', ({params}) => {
     else reasoning = params.value;
   }
   return { configOptions: options() };
+}).onRequest('session/prompt', async ({params}) => {
+  record('session/prompt', params);
+  writeFileSync('agent-change.txt', params.prompt[0].text);
+  if (mode === 'execute-wait') {
+    while (!existsSync(${JSON.stringify(join(directory, 'release'))})) await Bun.sleep(20);
+  }
+  if (mode !== 'execute-missing') {
+    const response = await fetch(mcp.url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...Object.fromEntries(mcp.headers.map(h => [h.name, h.value])) }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'report_result', arguments: { status: mode === 'execute-blocked' ? 'blocked' : 'completed', summary: 'Fixture result' } } }) });
+    const body = await response.json();
+    if (body.result?.isError || !response.ok) throw new Error(JSON.stringify(body));
+  }
+  if (mode === 'execute-crash') process.exit(1);
+  if (mode === 'execute-report-wait') {
+    while (!existsSync(${JSON.stringify(join(directory, 'release'))})) await Bun.sleep(20);
+  }
+  return { stopReason: 'end_turn' };
 }).connect(ndJsonStream(Writable.toWeb(process.stdout), Bun.stdin.stream()));
 setInterval(() => {}, 1000);
 `,

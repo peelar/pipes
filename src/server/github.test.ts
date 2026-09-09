@@ -3,7 +3,7 @@ import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { FetchHttpClient } from 'effect/unstable/http';
 import { createHmac } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import example from '../../.pipes/pipes';
@@ -27,11 +27,12 @@ const git = async (...args: Array<string>) => {
 test('GitHub connection validates remotes, preserves config, imports, and reuses managed clones', async () => {
   for (const input of [
     'owner/repo',
+    'owner/.github',
     'https://github.com/owner/repo.git',
     'git@github.com:owner/repo.git',
     'ssh://git@github.com/owner/repo',
   ]) {
-    expect(githubRepository(input)).toBe('owner/repo');
+    expect(githubRepository(input)).toBe(input === 'owner/.github' ? input : 'owner/repo');
   }
   for (const input of [
     '../repo',
@@ -45,10 +46,13 @@ test('GitHub connection validates remotes, preserves config, imports, and reuses
   }
   const directory = await mkdtemp(join(tmpdir(), 'pipes-github-connect-'));
   const source = join(directory, 'source');
-  const oldToken = process.env.GH_TOKEN;
   const oldGitConfig = process.env.GIT_CONFIG_GLOBAL;
-  process.env.GH_TOKEN = 'test-only-token';
   process.env.GIT_CONFIG_GLOBAL = join(directory, 'gitconfig');
+  await writeFile(
+    join(directory, 'github-token.json'),
+    JSON.stringify({ accessToken: 'test-only-token' }),
+    { mode: 0o600 },
+  );
   const fetchMock = (async (input: string | URL | Request) => {
     const url = new URL(typeof input === 'object' && 'url' in input ? input.url : input);
     if (url.pathname === '/user/repos') {
@@ -134,11 +138,6 @@ test('GitHub connection validates remotes, preserves config, imports, and reuses
     await expect(runtime.runPromise(github.inspect(cloned))).rejects.toThrow();
   } finally {
     await runtime.dispose();
-    if (oldToken === undefined) {
-      delete process.env.GH_TOKEN;
-    } else {
-      process.env.GH_TOKEN = oldToken;
-    }
     if (oldGitConfig === undefined) {
       delete process.env.GIT_CONFIG_GLOBAL;
     } else {
@@ -169,12 +168,55 @@ test('GitHub policy defaults to open assigned issues and validates routing', () 
   }
 });
 
+test('GitHub App device flow saves a private credential and authenticates Pipes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pipes-github-auth-'));
+  const fetchMock = (async (input: string | URL | Request, init?: RequestInit) => {
+    const request =
+      typeof input === 'object' && 'url' in input ? input : new Request(String(input), init);
+    const url = new URL(request.url);
+    if (url.pathname === '/login/device/code') {
+      return Response.json({
+        device_code: 'device',
+        interval: 1,
+        user_code: 'ABCD-1234',
+        verification_uri: 'https://github.com/login/device',
+      });
+    }
+    if (url.pathname === '/login/oauth/access_token') {
+      return Response.json({ access_token: 'pipes-token', expires_in: 3600 });
+    }
+    expect(request.headers.get('Authorization')).toBe('Bearer pipes-token');
+    return Response.json({ id: 7, login: 'me' });
+  }) as typeof fetch;
+  const runtime = ManagedRuntime.make(
+    GitHub.layer.pipe(
+      Layer.provideMerge(Store.layer(join(directory, 'test.sqlite'))),
+      Layer.provide(BunServices.layer),
+      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchMock)),
+    ),
+  );
+  try {
+    const github = await runtime.runPromise(GitHub);
+    const login = await runtime.runPromise(github.loginStart);
+    expect(login.userCode).toBe('ABCD-1234');
+    expect(await runtime.runPromise(github.loginComplete(login))).toBe('me');
+    expect((await stat(join(directory, 'github-token.json'))).mode & 0o777).toBe(0o600);
+    expect(await runtime.runPromise(github.identity)).toBe('me');
+  } finally {
+    await runtime.dispose();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('GitHub import paginates, preserves snapshots across restart and verifies webhook deliveries', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'pipes-github-'));
-  const oldToken = process.env.GH_TOKEN;
   const oldSecret = process.env.PIPES_GITHUB_WEBHOOK_SECRET;
-  process.env.GH_TOKEN = 'test-token';
   process.env.PIPES_GITHUB_WEBHOOK_SECRET = 'test-secret';
+  await writeFile(
+    join(directory, 'github-token.json'),
+    JSON.stringify({ accessToken: 'test-token' }),
+    { mode: 0o600 },
+  );
   let current = { ...issue };
   const requests: Array<string> = [];
   const fetchMock = (async (input: string | URL | Request) => {
@@ -245,11 +287,6 @@ test('GitHub import paginates, preserves snapshots across restart and verifies w
     expect(snapshot.tasks[0]?.workflow).toBe(policy.workflow);
   } finally {
     await runtime.dispose();
-    if (oldToken === undefined) {
-      delete process.env.GH_TOKEN;
-    } else {
-      process.env.GH_TOKEN = oldToken;
-    }
     if (oldSecret === undefined) {
       delete process.env.PIPES_GITHUB_WEBHOOK_SECRET;
     } else {

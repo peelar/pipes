@@ -1,7 +1,17 @@
-import { useRenderer } from '@opentui/react';
 import { Effect, type ManagedRuntime } from 'effect';
 import { useEffect, useState } from 'react';
 import { Client } from '../client/connection';
+import { type GitHubLogin } from '../protocol/pipes';
+
+export const installationUrl = 'https://github.com/apps/pipes-github/installations/new';
+
+export function openBrowser(url: string) {
+  try {
+    Bun.spawn([process.platform === 'darwin' ? 'open' : 'xdg-open', url]);
+  } catch {
+    // The UI keeps the URL visible when no browser opener is available.
+  }
+}
 
 export function RemoteRepositories({
   onSelect,
@@ -10,11 +20,12 @@ export function RemoteRepositories({
   onSelect: (repository: string, login: string) => void;
   runtime: ManagedRuntime.ManagedRuntime<Client, never>;
 }) {
-  const renderer = useRenderer();
   const [result, setResult] = useState<{ login: string; repositories: ReadonlyArray<string> }>();
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [authenticating, setAuthenticating] = useState(false);
+  const [authorization, setAuthorization] = useState<typeof GitHubLogin.Type>();
+  const [afterInstallation, setAfterInstallation] = useState<'login' | 'reload'>();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -40,23 +51,71 @@ export function RemoteRepositories({
 
   async function login() {
     setAuthenticating(true);
-    renderer.suspend();
+    setError('');
     try {
-      const code = await Bun.spawn(
-        ['gh', 'auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web'],
-        // Avoid gh's Enter prompt blocking detection of browser approval.
-        { stderr: 'inherit', stdin: 'ignore', stdout: 'inherit' },
-      ).exited;
-      if (code !== 0) {
-        throw new Error('GitHub sign-in did not complete. Retry when ready.');
-      }
+      const flow = await runtime.runPromise(
+        Effect.flatMap(Client, (client) => client.githubLoginStart()),
+      );
+      setAuthorization(flow);
+      openBrowser(flow.verificationUri);
+      await runtime.runPromise(
+        Effect.flatMap(Client, (client) =>
+          client.githubLoginComplete({ deviceCode: flow.deviceCode, interval: flow.interval }),
+        ),
+      );
+      setAuthorization(undefined);
       reload();
     } catch (error) {
-      setError(`Cannot sign in with gh. Check that GitHub CLI is installed. ${String(error)}`);
+      setAuthorization(undefined);
+      setError(String(error));
     } finally {
-      renderer.resume();
       setAuthenticating(false);
     }
+  }
+
+  function install(next: 'login' | 'reload') {
+    setAfterInstallation(next);
+    openBrowser(installationUrl);
+  }
+
+  if (afterInstallation) {
+    return (
+      <box flexDirection="column" gap={1}>
+        <text>Choose the GitHub account and repositories Pipes may access.</text>
+        <text>{installationUrl}</text>
+        <select
+          focused
+          height={4}
+          onSelect={(index) => {
+            if (index === 0) {
+              const next = afterInstallation;
+              setAfterInstallation(undefined);
+              if (next === 'login') {
+                void login();
+              } else {
+                reload();
+              }
+            } else {
+              openBrowser(installationUrl);
+            }
+          }}
+          options={[
+            { description: 'Continue after choosing access in GitHub', name: 'Done' },
+            { description: 'Open the GitHub installation page again', name: 'Open GitHub' },
+          ]}
+        />
+      </box>
+    );
+  }
+
+  if (authorization) {
+    return (
+      <box flexDirection="column" gap={1}>
+        <text>Enter this code at {authorization.verificationUri}</text>
+        <text fg="#89b4fa">{authorization.userCode}</text>
+        <text fg="#f9e2af">Waiting for GitHub approval…</text>
+      </box>
+    );
   }
 
   if (error) {
@@ -68,15 +127,15 @@ export function RemoteRepositories({
           height={4}
           onSelect={(index) => {
             if (index === 0) {
-              void login();
+              install('login');
             } else {
               reload();
             }
           }}
           options={[
             {
-              description: 'Continue with GitHub CLI browser authentication',
-              name: 'Sign in to GitHub',
+              description: 'Choose account and repository access in GitHub',
+              name: 'Connect GitHub',
             },
             { description: 'Check credentials and load repositories again', name: 'Retry' },
           ]}
@@ -99,16 +158,35 @@ export function RemoteRepositories({
             const repository = result.repositories[index];
             if (repository) {
               onSelect(repository, result.login);
+            } else {
+              install('reload');
             }
           }}
-          options={result.repositories.map((name) => ({
-            description: 'Clone into Pipes’ managed directory',
-            name,
-          }))}
+          options={[
+            ...result.repositories.map((name) => ({
+              description: 'Clone into Pipes’ managed directory',
+              name,
+            })),
+            {
+              description: 'Change account and repository access in GitHub',
+              name: 'Manage GitHub access',
+            },
+          ]}
           showScrollIndicator
         />
       ) : (
-        <text>No repositories accessible to this GitHub account.</text>
+        <select
+          focused
+          height={4}
+          onSelect={(index) => (index === 0 ? install('reload') : reload())}
+          options={[
+            {
+              description: 'Choose account and repository access in GitHub',
+              name: 'Manage GitHub access',
+            },
+            { description: 'Load repositories again', name: 'Retry' },
+          ]}
+        />
       )}
     </box>
   );

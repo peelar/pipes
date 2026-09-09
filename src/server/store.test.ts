@@ -1,3 +1,7 @@
+import { Database } from 'bun:sqlite';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, test } from 'bun:test';
 import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer, ManagedRuntime, Queue, Stream } from 'effect';
@@ -50,6 +54,85 @@ test('watch emits initially and after writes, stays idle otherwise, and supports
   }
 });
 
+test('existing execution databases gain event timestamps without losing runs', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pipes-migration-'));
+  const filename = join(directory, 'pipes.sqlite');
+  const makeRuntime = () =>
+    ManagedRuntime.make(Store.layer(filename).pipe(Layer.provide(BunServices.layer)));
+  let runtime = makeRuntime();
+  try {
+    const repository = await runtime.runPromise(
+      Effect.flatMap(Store, (store) => store.register(process.cwd())),
+    );
+    const task = await runtime.runPromise(
+      Effect.flatMap(Store, (store) =>
+        store.submit({ brief: '', repositoryId: repository.id, title: 'Migration' }),
+      ),
+    );
+    const run = {
+      attempts: [],
+      baseRevision: 'base',
+      branch: 'pipes/test',
+      brief: '',
+      configuration: {
+        workflows: {
+          work: {
+            steps: [
+              {
+                agent: { model: 'test', provider: 'codex' as const, reasoning: 'low' },
+                name: 'work',
+                prompt: 'work',
+              },
+            ],
+          },
+        },
+      },
+      createdAt: '2026-09-09T00:00:00.000Z',
+      id: 'migration-run',
+      status: 'queued' as const,
+      summary: '',
+      taskId: task.id,
+      title: task.title,
+      workflow: 'work',
+      workspace: directory,
+    };
+    await runtime.runPromise(Effect.flatMap(Store, (store) => store.saveRun(run, true)));
+    await runtime.dispose();
+    const legacy = new Database(filename);
+    legacy.exec('ALTER TABLE run_events DROP COLUMN createdAt');
+    legacy.exec('ALTER TABLE tasks DROP COLUMN discardedAt');
+    legacy.exec('DELETE FROM effect_sql_migrations WHERE migration_id >= 4');
+    legacy.close();
+    runtime = makeRuntime();
+    await runtime.runPromise(
+      Effect.flatMap(Store, (store) => store.saveRun({ ...run, summary: 'Upgraded' })),
+    );
+    expect(
+      (await runtime.runPromise(Effect.flatMap(Store, (store) => store.snapshot))).runs?.[0]
+        ?.summary,
+    ).toBe('Upgraded');
+    const upgraded = new Database(filename, { readonly: true });
+    try {
+      const events = upgraded
+        .query<{ createdAt: string }, []>('SELECT createdAt FROM run_events ORDER BY id')
+        .all();
+      expect(events).toHaveLength(2);
+      expect(events[0]?.createdAt).toBe(run.createdAt);
+      expect(events[1]?.createdAt).toBeTruthy();
+    } finally {
+      upgraded.close();
+    }
+    await runtime.dispose();
+    runtime = makeRuntime();
+    expect(
+      (await runtime.runPromise(Effect.flatMap(Store, (store) => store.snapshot))).runs,
+    ).toHaveLength(1);
+  } finally {
+    await runtime.dispose();
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
 test('admission deduplicates source observations independently of delivery and preserves manual tasks', async () => {
   const runtime = ManagedRuntime.make(
     Store.layer(':memory:').pipe(Layer.provide(BunServices.layer)),
@@ -78,5 +161,54 @@ test('admission deduplicates source observations independently of delivery and p
     expect(snapshot.transitions).toHaveLength(4);
   } finally {
     await runtime.dispose();
+  }
+});
+
+test('discard removes a task from the queue while preserving its stored history', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pipes-discard-'));
+  const filename = join(directory, 'pipes.sqlite');
+  const makeRuntime = () =>
+    ManagedRuntime.make(Store.layer(filename).pipe(Layer.provide(BunServices.layer)));
+  let runtime = makeRuntime();
+  try {
+    let store = await runtime.runPromise(Store);
+    const repository = await runtime.runPromise(store.register(process.cwd()));
+    const task = await runtime.runPromise(
+      store.submit({ brief: 'Keep me', repositoryId: repository.id, title: 'Discard me' }),
+    );
+    await runtime.dispose();
+    const legacy = new Database(filename);
+    legacy.exec(`
+      ALTER TABLE transitions RENAME TO transitions_fixed;
+      CREATE TABLE transitions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, taskId TEXT NOT NULL REFERENCES tasks(id),
+        kind TEXT NOT NULL CHECK(kind = 'submitted'), createdAt TEXT NOT NULL
+      );
+      INSERT INTO transitions SELECT * FROM transitions_fixed;
+      DROP TABLE transitions_fixed;
+      DELETE FROM effect_sql_migrations WHERE migration_id = 6;
+    `);
+    legacy.close();
+    runtime = makeRuntime();
+    store = await runtime.runPromise(Store);
+    await runtime.runPromise(store.discard(task.id));
+    expect((await runtime.runPromise(store.snapshot)).tasks).toHaveLength(0);
+    const database = new Database(filename, { readonly: true });
+    try {
+      expect(database.query('SELECT id FROM tasks WHERE id = ?').get(task.id)).toBeTruthy();
+      expect(
+        database
+          .query<{ kind: string }, [string]>(
+            'SELECT kind FROM transitions WHERE taskId = ? ORDER BY id',
+          )
+          .all(task.id)
+          .map(({ kind }) => kind),
+      ).toEqual(['submitted', 'discarded']);
+    } finally {
+      database.close();
+    }
+  } finally {
+    await runtime.dispose();
+    rmSync(directory, { force: true, recursive: true });
   }
 });

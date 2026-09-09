@@ -2,8 +2,8 @@ import { SqliteClient, SqliteMigrator } from '@effect/sql-sqlite-bun';
 import { Context, DateTime, Effect, Layer, PubSub, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { SqlClient } from 'effect/unstable/sql';
-import { basename } from 'node:path';
-import { PipesError, Repository, Snapshot, Task, TaskSubmission } from '../protocol/pipes';
+import { basename, dirname } from 'node:path';
+import { PipesError, Repository, Run, Snapshot, Task, TaskSubmission } from '../protocol/pipes';
 
 const databaseError = () =>
   new PipesError({ message: 'Database operation failed; see server.log.' });
@@ -11,7 +11,10 @@ const databaseError = () =>
 export class Store extends Context.Service<
   Store,
   {
+    readonly dataDirectory: string;
+    readonly discard: (taskId: string) => Effect.Effect<void, PipesError>;
     readonly register: (path: string) => Effect.Effect<Repository, PipesError>;
+    readonly saveRun: (run: Run, create?: boolean) => Effect.Effect<void, PipesError>;
     readonly snapshot: Effect.Effect<Snapshot, PipesError>;
     readonly submit: (input: TaskSubmission) => Effect.Effect<Task, PipesError>;
     readonly watch: Stream.Stream<Snapshot, PipesError>;
@@ -46,6 +49,27 @@ export class Store extends Context.Service<
               yield* sql`ALTER TABLE tasks ADD COLUMN workflow TEXT`;
               yield* sql`CREATE UNIQUE INDEX tasks_source ON tasks(sourceId) WHERE sourceId IS NOT NULL`;
             }),
+            '0003_execution': Effect.gen(function* () {
+              yield* sql`CREATE TABLE runs (id TEXT PRIMARY KEY, taskId TEXT NOT NULL UNIQUE REFERENCES tasks(id), data TEXT NOT NULL)`;
+              yield* sql`CREATE TABLE run_events (id INTEGER PRIMARY KEY AUTOINCREMENT, runId TEXT NOT NULL REFERENCES runs(id), data TEXT NOT NULL)`;
+            }),
+            '0004_run_event_timestamps': Effect.gen(function* () {
+              const columns = yield* sql<{ name: string }>`PRAGMA table_info(run_events)`;
+              if (!columns.some((column) => column.name === 'createdAt')) {
+                yield* sql`ALTER TABLE run_events ADD COLUMN createdAt TEXT NOT NULL DEFAULT ''`;
+                yield* sql`UPDATE run_events SET createdAt = json_extract(data, '$.createdAt')`;
+              }
+            }),
+            '0005_discarded_tasks': sql`ALTER TABLE tasks ADD COLUMN discardedAt TEXT`,
+            '0006_discard_transitions': Effect.gen(function* () {
+              yield* sql`ALTER TABLE transitions RENAME TO transitions_old`;
+              yield* sql`CREATE TABLE transitions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, taskId TEXT NOT NULL REFERENCES tasks(id),
+                kind TEXT NOT NULL CHECK(kind IN ('submitted', 'discarded')), createdAt TEXT NOT NULL
+              )`;
+              yield* sql`INSERT INTO transitions SELECT * FROM transitions_old`;
+              yield* sql`DROP TABLE transitions_old`;
+            }),
           }),
         });
 
@@ -53,11 +77,23 @@ export class Store extends Context.Service<
           .withTransaction(
             Effect.gen(function* () {
               const repositories = yield* sql`SELECT * FROM repositories ORDER BY name, id`;
-              const tasks = yield* sql`SELECT * FROM tasks ORDER BY rowid`;
-              const transitions = yield* sql`SELECT * FROM transitions ORDER BY id`;
+              const tasks =
+                yield* sql`SELECT * FROM tasks WHERE discardedAt IS NULL ORDER BY rowid`;
+              const rows = yield* sql<{
+                data: string;
+              }>`SELECT runs.data FROM runs JOIN tasks ON tasks.id = runs.taskId WHERE tasks.discardedAt IS NULL ORDER BY runs.rowid`;
+              const runs = yield* Effect.forEach(rows, (row) =>
+                Schema.decodeEffect(Schema.fromJsonString(Run))(row.data),
+              );
+              const transitions =
+                yield* sql`SELECT transitions.* FROM transitions JOIN tasks ON tasks.id = transitions.taskId WHERE tasks.discardedAt IS NULL ORDER BY transitions.id`;
               return yield* Schema.decodeUnknownEffect(Snapshot)({
                 repositories,
-                tasks,
+                runs,
+                tasks: tasks.map((task) => ({
+                  ...task,
+                  status: runs.find((run) => run.taskId === task.id)?.status ?? task.status,
+                })),
                 transitions,
               });
             }),
@@ -88,6 +124,26 @@ export class Store extends Context.Service<
           return yield* Schema.decodeUnknownEffect(Repository)(rows[0]).pipe(
             Effect.mapError(databaseError),
           );
+        });
+
+        const discard = Effect.fn('Store.discard')(function* (taskId: string) {
+          const createdAt = DateTime.formatIso(yield* DateTime.now);
+          yield* sql
+            .withTransaction(
+              Effect.gen(function* () {
+                const rows =
+                  yield* sql`UPDATE tasks SET discardedAt = ${createdAt} WHERE id = ${taskId} AND discardedAt IS NULL RETURNING id`;
+                if (!rows.length) {
+                  return yield* new PipesError({ message: 'Queue item not found.' });
+                }
+                yield* sql`INSERT INTO transitions ${sql.insert({ createdAt, kind: 'discarded', taskId })}`;
+              }),
+            )
+            .pipe(
+              Effect.tapError(Effect.logError),
+              Effect.mapError((error) => (error instanceof PipesError ? error : databaseError())),
+            );
+          yield* PubSub.publish(changes, undefined);
         });
 
         const submit = Effect.fn('Store.submit')(function* (submission: TaskSubmission) {
@@ -131,9 +187,30 @@ export class Store extends Context.Service<
             );
         });
 
+        const saveRun = Effect.fn('Store.saveRun')(function* (input: Run, create = false) {
+          const run = yield* Schema.decodeEffect(Run)(input).pipe(Effect.mapError(databaseError));
+          yield* sql
+            .withTransaction(
+              Effect.gen(function* () {
+                const data = JSON.stringify(run);
+                if (create) {
+                  yield* sql`INSERT INTO runs ${sql.insert({ data, id: run.id, taskId: run.taskId })}`;
+                } else {
+                  yield* sql`UPDATE runs SET data = ${data} WHERE id = ${run.id}`;
+                }
+                yield* sql`INSERT INTO run_events ${sql.insert({ createdAt: DateTime.formatIso(yield* DateTime.now), data, runId: run.id })}`;
+              }),
+            )
+            .pipe(Effect.tapError(Effect.logError), Effect.mapError(databaseError));
+          yield* PubSub.publish(changes, undefined);
+        });
+
         return Store.of({
+          dataDirectory: dirname(filename),
+          discard,
           register: (path) =>
             register(path).pipe(Effect.tap(() => PubSub.publish(changes, undefined))),
+          saveRun,
           snapshot,
           submit: (input) =>
             submit(input).pipe(Effect.tap(() => PubSub.publish(changes, undefined))),

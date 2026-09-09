@@ -10,6 +10,7 @@ test('setup guards pending actions and recovers through retry before creation', 
     models: [],
     reasoning: 'low',
     reasoningOptions: [],
+    skillInstalled: false,
   });
   let state: Parameters<typeof transitionSetup>[0] = { phase: 'connection', status: 'checking' };
   const key = (key: string) => transitionSetup(state, { key, type: 'key' });
@@ -19,6 +20,11 @@ test('setup guards pending actions and recovers through retry before creation', 
   state = transitionSetup(state, { settings, type: 'connected' });
   expect(key('c')).toBe(state);
   expect(key('b')).toBe(state);
+  state = key('i');
+  expect(state.status).toBe('installing');
+  state = transitionSetup(state, { type: 'installed' });
+  expect(state.status).toBe('connected');
+  expect('settings' in state && state.settings.skillInstalled).toBe(true);
   state = key('return');
   expect(key('b')).toEqual({ phase: 'connection', status: 'checking' });
   expect(key('c')).toBe(state);
@@ -48,6 +54,7 @@ test('setup offers validation without creation for an existing configuration', (
     models: [],
     reasoning: 'low',
     reasoningOptions: [],
+    skillInstalled: true,
   });
   let state: Parameters<typeof transitionSetup>[0] = { phase: 'connection', status: 'checking' };
   state = transitionSetup(state, { settings, type: 'connected' });

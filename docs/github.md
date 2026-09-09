@@ -15,9 +15,10 @@ receive issues. If none exists, the UI offers the Codex/starter workflow setup.
 Confirming creates `.pipes/github.ts` and imports matching issues. Existing
 configuration and policy are preserved. Edit policy in code to change it.
 
-Authentication uses `GH_TOKEN` or `GITHUB_TOKEN` from the server environment,
-falling back to an existing `gh auth login` session when the GitHub CLI is available.
-An authentication failure can be retried in the connection UI.
+Authentication uses the Pipes GitHub App's device flow. The connection UI first
+opens GitHub's installation screen, where you choose the account and repositories,
+then guides you through sign-in. Use **Manage GitHub access** in the repository
+picker to change those grants later.
 
 ## Manual configuration
 
@@ -40,18 +41,16 @@ Alternatively, export that policy as the default from `.pipes/github.ts`, as the
 UI does. Define policy in only one of these files. To disable intake, remove the
 policy from whichever file supplies it.
 
-Provide a personal GitHub token in `GH_TOKEN` or `GITHUB_TOKEN` in the server's
-environment (or use the existing GitHub CLI login). The token must identify your user and have read access to issues in
-the target repository. Keep it out of repository configuration.
-
 Register the local checkout with `pipes register /path/to/repository`. Intake runs
-on registration and server startup. After changing configuration, or to catch up
-without restarting, use `pipes github --repo <registered-repository-id>`.
+on registration, server startup, and every minute while the server is running.
+After changing configuration, or to sync immediately, use
+`pipes github --repo <registered-repository-id>`.
 `pipes list --json` includes repository IDs, task source links, and workflow routes.
 The command reports matching observations, including already imported issues.
 
-For continuous intake, set `PIPES_GITHUB_WEBHOOK_SECRET` in the server environment
-and restart it. The webhook listener binds to `127.0.0.1:9419`; optionally change
+Polling requires no public endpoint. For faster optional webhook delivery, set
+`PIPES_GITHUB_WEBHOOK_SECRET` in the server environment and restart Pipes. The
+webhook listener binds to `127.0.0.1:9419`; optionally change
 the port with `PIPES_GITHUB_PORT`. Expose that listener through your own HTTPS tunnel
 or reverse proxy. In the target GitHub repository's webhook settings, configure:
 
@@ -62,7 +61,6 @@ or reverse proxy. In the target GitHub repository's webhook settings, configure:
 
 Expose only the webhook listener, not the privileged RPC listener. Deliveries use
 [GitHub's signature validation](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries).
-Failed intake returns an error; retry the delivery or run the intake command to
-catch up. Server startup also catches up on currently eligible issues.
+Failed webhook intake returns an error; retry the delivery or let polling catch up.
 
-Tasks appear in the existing queue. Agent execution is not connected yet.
+Tasks appear in the existing queue and start only when requested explicitly.

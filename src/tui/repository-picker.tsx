@@ -167,6 +167,60 @@ export async function completePath(value: string, base: string) {
   };
 }
 
+function ConnectionChoices({
+  busy,
+  onBrowse,
+  onGitHub,
+  onRegister,
+  ready,
+  root,
+}: {
+  busy: boolean;
+  onBrowse: () => void;
+  onGitHub?: () => void;
+  onRegister: (path: string) => void;
+  ready: boolean;
+  root?: string;
+}) {
+  if (!ready) {
+    return <text fg="#f9e2af">Finding the current repository…</text>;
+  }
+  const options = [
+    ...(root ? [{ description: root, name: 'Connect this repository' }] : []),
+    {
+      description: 'Choose another directory on this computer',
+      name: 'Browse local directories',
+    },
+    ...(onGitHub
+      ? [
+          {
+            description: 'Choose a repository available to your GitHub account',
+            name: 'Clone from GitHub',
+          },
+        ]
+      : []),
+  ];
+  return (
+    <>
+      <text>Connect a repository</text>
+      <select
+        focused={!busy}
+        height={6}
+        onSelect={(index) => {
+          if (root && index === 0) {
+            onRegister(root);
+          } else if (index === (root ? 1 : 0)) {
+            onBrowse();
+          } else {
+            onGitHub?.();
+          }
+        }}
+        options={options}
+      />
+    </>
+  );
+}
+
 export function RepositoryPicker({
   busy,
   onGitHub,
@@ -181,6 +235,7 @@ export function RepositoryPicker({
   startDirectory: string;
 }) {
   const [directory, setDirectory] = useState(startDirectory);
+  const [browsing, setBrowsing] = useState(false);
   const [listing, setListing] = useState<{ folders: Array<string>; path: string; root?: string }>();
   const [editing, setEditing] = useState(false);
   const [path, setPath] = useState('');
@@ -220,24 +275,22 @@ export function RepositoryPicker({
           })
           .catch((error: unknown) => setMessage(String(error)));
       }
-    } else if (key.name === 'g' && onGitHub) {
-      onGitHub();
-    } else if (key.name === 'p') {
+    } else if (browsing && key.name === 'p') {
       setPath('');
       setEditing(true);
-    } else if (key.name === 'left') {
+    } else if (browsing && key.name === 'left') {
       setDirectory(dirname(directory));
     }
   });
 
-  const options = [
+  const browseOptions = [
     ...(ready &&
     listing.root &&
     (onGitHub || !repositories.some((repository) => repository.path === listing.root))
       ? [
           {
             action: 'register' as const,
-            description: listing.root,
+            description: '',
             name: 'Connect this repository',
             value: listing.root,
           },
@@ -245,7 +298,7 @@ export function RepositoryPicker({
       : []),
     {
       action: 'browse' as const,
-      description: 'Parent directory',
+      description: '',
       name: '..',
       value: dirname(directory),
     },
@@ -266,23 +319,27 @@ export function RepositoryPicker({
   ];
 
   return (
-    <box
-      border
-      flexDirection="column"
-      flexShrink={0}
-      height={12}
-      padding={1}
-      title={`Connect · [Enter] selects · [←] parent · [p] path · [Esc] cancels`}
-    >
-      <text>{directory}</text>
-      <text fg="#a6e3a1">
-        {ready
-          ? listing.root
-            ? `Git repository: ${listing.root}`
-            : 'Not a Git repository'
-          : 'Reading directory…'}
-      </text>
-      {editing ? (
+    <box flexDirection="column" flexShrink={0} height={10}>
+      {browsing && <text fg="#a6adc8">{directory}</text>}
+      {browsing && (
+        <text fg="#a6e3a1">
+          {ready
+            ? listing.root
+              ? 'Git repository'
+              : 'Not a Git repository'
+            : 'Reading directory…'}
+        </text>
+      )}
+      {!browsing ? (
+        <ConnectionChoices
+          busy={busy}
+          onBrowse={() => setBrowsing(true)}
+          onGitHub={onGitHub}
+          onRegister={onRegister}
+          ready={ready}
+          root={listing?.root}
+        />
+      ) : editing ? (
         <input
           focused={!busy}
           onInput={setPath}
@@ -301,7 +358,7 @@ export function RepositoryPicker({
           focused={!busy}
           key={`${directory}:${ready}`}
           onSelect={(index) => {
-            const option = options[index];
+            const option = browseOptions[index];
             if (!option || busy) {
               return;
             }
@@ -311,10 +368,11 @@ export function RepositoryPicker({
               setDirectory(option.value);
             }
           }}
-          options={options}
+          options={browseOptions}
           showScrollIndicator
         />
       ) : null}
+      {browsing && !editing && <text fg="#a6adc8">[←] parent · [p] type a path</text>}
       {message && <text fg="#f9e2af">{message}</text>}
     </box>
   );

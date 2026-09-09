@@ -6,30 +6,51 @@ import { RpcSerialization, RpcServer } from 'effect/unstable/rpc';
 import { join } from 'node:path';
 import { settings, type Connection } from './client/connection';
 import { PipesError, PipesRpcs } from './protocol/pipes';
+import { Execution } from './server/execution';
 import { Store } from './server/store';
 import { GitHub } from './server/github';
-import { checkCodexConfig, probeCodex, setupCodex } from './server/codex';
+import { checkCodexConfig, installCodexSkill, probeCodex, setupCodex } from './server/codex';
 import { ObservabilityLayer } from './observability';
+import { readConversation } from './server/conversation';
 
 export const serve = Effect.fn('serve')(function* (connection: Connection) {
   const stopped = yield* Deferred.make<void>();
   const services = yield* Layer.build(
-    GitHub.layer.pipe(Layer.provideMerge(Store.layer(join(connection.directory, 'pipes.sqlite')))),
+    Layer.merge(GitHub.layer, Execution.layer(connection.directory)).pipe(
+      Layer.provideMerge(Store.layer(join(connection.directory, 'pipes.sqlite'))),
+    ),
   );
   const github = yield* GitHub.pipe(Effect.provide(services));
   const handlers = PipesRpcs.toLayer(
     Effect.gen(function* () {
       const store = yield* Store;
+      const execution = yield* Execution;
       return {
+        cancel: ({ taskId }) => execution.cancel(taskId),
         codexProbe: probeCodex,
         codexSetup: setupCodex,
+        codexSkillInstall: () => installCodexSkill(),
         configCheck: ({ path }) => checkCodexConfig(path),
+        conversation: ({ taskId }) =>
+          Effect.gen(function* () {
+            const run = (yield* store.snapshot).runs?.find((run) => run.taskId === taskId);
+            if (!run) {
+              return yield* new PipesError({ message: 'This task has no execution conversation.' });
+            }
+            return yield* readConversation(run);
+          }),
+        discard: ({ taskId }) => execution.discard(taskId),
         githubAttach: (input) => github.attach(input),
         githubClone: ({ repository }) => github.clone(repository, connection.directory),
         githubIdentity: () => github.identity,
         githubInspect: ({ path }) => github.inspect(path),
         githubIntake: ({ repositoryId }) => github.intake(repositoryId),
+        githubLoginComplete: (input) => github.loginComplete(input),
+        githubLoginStart: () => github.loginStart,
         githubRepositories: () => github.repositories,
+        handoffClose: execution.handoffClose,
+        handoffReport: execution.handoffReport,
+        jumpIn: ({ confirmedStopped, taskId }) => execution.jumpIn(taskId, confirmedStopped),
         register: ({ path }) =>
           store
             .register(path)
@@ -42,6 +63,8 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
             ),
         shutdown: () => Deferred.succeed(stopped, undefined).pipe(Effect.asVoid),
         snapshot: () => store.snapshot,
+        start: execution.start,
+        stop: ({ taskId }) => execution.stop(taskId),
         submit: (input) => store.submit(input),
         watch: () => store.watch,
       };
@@ -55,6 +78,7 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
   );
   const http = yield* RpcServer.toHttpEffect(PipesRpcs).pipe(Effect.provide(context));
   const handle = HttpEffect.toWebHandler(http);
+  let ready = false;
   yield* Effect.acquireRelease(
     Effect.try({
       catch: (error) => new PipesError({ message: `Cannot listen: ${String(error)}` }),
@@ -66,6 +90,9 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
               request.headers.has('origin')
             ) {
               return new Response('Forbidden', { status: 403 });
+            }
+            if (!ready) {
+              return new Response('Starting', { status: 503 });
             }
             const path = new URL(request.url).pathname;
             if (path === '/health') {
@@ -82,6 +109,8 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
     }),
     (server) => Effect.promise(() => server.stop(true)),
   );
+  yield* Effect.flatMap(Execution, (execution) => execution.recover).pipe(Effect.provide(services));
+  ready = true;
   yield* Effect.logInfo(`Pipes listening on ${connection.url}`);
   yield* Layer.build(GitHub.deliveryLayer.pipe(Layer.provide(Layer.succeedContext(services))));
   yield* Deferred.await(stopped);

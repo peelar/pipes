@@ -1,11 +1,19 @@
 import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
-import { Agent, AgentCommand, GitHubPolicy, GitHubRepository } from '../config';
+import { Agent, AgentCommand, Config, GitHubPolicy, GitHubRepository } from '../config';
+import { ExecutionStatus } from './execution-state';
 
 export const GitHubConnection = Schema.Struct({
   policy: Schema.optionalKey(GitHubPolicy),
   remotes: Schema.Array(GitHubRepository),
   workflows: Schema.Array(Schema.String),
+});
+
+export const GitHubLogin = Schema.Struct({
+  deviceCode: Schema.NonEmptyString,
+  interval: Schema.Int,
+  userCode: Schema.NonEmptyString,
+  verificationUri: Schema.NonEmptyString,
 });
 
 const AgentChoice = Schema.Struct({ name: Schema.String, value: Schema.NonEmptyString });
@@ -16,6 +24,7 @@ export class CodexSettings extends Schema.Class<CodexSettings>('CodexSettings')(
   models: Schema.Array(AgentChoice),
   reasoning: Schema.NonEmptyString,
   reasoningOptions: Schema.Array(AgentChoice),
+  skillInstalled: Schema.Boolean,
 }) {}
 
 export const CodexProbe = Schema.Struct({
@@ -52,7 +61,7 @@ export class Task extends Schema.Class<Task>('Task')({
   repositoryId: Schema.String,
   sourceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   sourceUrl: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  status: Schema.Literal('queued'),
+  status: ExecutionStatus,
   title: Title,
   workflow: Schema.optionalKey(Schema.NullOr(Schema.String)),
 }) {}
@@ -60,12 +69,47 @@ export class Task extends Schema.Class<Task>('Task')({
 export class Transition extends Schema.Class<Transition>('Transition')({
   createdAt: Schema.String,
   id: Schema.Int,
-  kind: Schema.Literal('submitted'),
+  kind: Schema.Literals(['submitted', 'discarded']),
   taskId: Schema.String,
+}) {}
+
+export const StepResult = Schema.Struct({
+  status: Schema.Literals(['completed', 'blocked', 'failed']),
+  summary: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(100_000)),
+});
+
+export const Attempt = Schema.Struct({
+  codexHome: Schema.optionalKey(Schema.String),
+  id: Schema.String,
+  result: Schema.optionalKey(StepResult),
+  sessionId: Schema.optionalKey(Schema.String),
+  status: Schema.Literals(['running', 'completed', 'blocked', 'failed', 'interrupted']),
+  step: Schema.String,
+  transcript: Schema.String,
+});
+
+export class Run extends Schema.Class<Run>('Run')({
+  attempts: Schema.Array(Attempt),
+  baseRevision: Schema.String,
+  branch: Schema.String,
+  brief: Brief,
+  configuration: Config,
+  createdAt: Schema.String,
+  handoffToken: Schema.optionalKey(Schema.String),
+  id: Schema.String,
+  revision: Schema.optionalKey(Schema.String),
+  status: ExecutionStatus,
+  summary: Schema.String,
+  taskId: Schema.String,
+  title: Title,
+  workerStopped: Schema.optionalKey(Schema.Boolean),
+  workflow: Schema.String,
+  workspace: Schema.String,
 }) {}
 
 export class Snapshot extends Schema.Class<Snapshot>('Snapshot')({
   repositories: Schema.Array(Repository),
+  runs: Schema.optionalKey(Schema.Array(Run)),
   tasks: Schema.Array(Task),
   transitions: Schema.Array(Transition),
 }) {}
@@ -75,6 +119,12 @@ export class PipesError extends Schema.TaggedError<PipesError>()('PipesError', {
 }) {}
 
 export class PipesRpcs extends RpcGroup.make(
+  Rpc.make('githubLoginStart', { error: PipesError, success: GitHubLogin }),
+  Rpc.make('githubLoginComplete', {
+    error: PipesError,
+    payload: { deviceCode: Schema.NonEmptyString, interval: Schema.Int },
+    success: Schema.String,
+  }),
   Rpc.make('githubRepositories', {
     error: PipesError,
     success: Schema.Struct({ login: Schema.String, repositories: Schema.Array(GitHubRepository) }),
@@ -105,6 +155,7 @@ export class PipesRpcs extends RpcGroup.make(
     success: Schema.Int,
   }),
   Rpc.make('codexProbe', { error: PipesError, payload: CodexProbe, success: CodexSettings }),
+  Rpc.make('codexSkillInstall', { error: PipesError, success: Schema.String }),
   Rpc.make('codexSetup', {
     error: PipesError,
     payload: { agent: Agent, path: Schema.NonEmptyString },
@@ -114,6 +165,53 @@ export class PipesRpcs extends RpcGroup.make(
     error: PipesError,
     payload: { path: Schema.NonEmptyString },
     success: Schema.String,
+  }),
+  Rpc.make('start', {
+    error: PipesError,
+    payload: { taskId: Schema.NonEmptyString, workflow: Schema.optionalKey(Schema.NonEmptyString) },
+    success: Run,
+  }),
+  Rpc.make('stop', {
+    error: PipesError,
+    payload: { taskId: Schema.NonEmptyString },
+    success: Schema.Void,
+  }),
+  Rpc.make('cancel', {
+    error: PipesError,
+    payload: { taskId: Schema.NonEmptyString },
+    success: Schema.Void,
+  }),
+  Rpc.make('discard', {
+    error: PipesError,
+    payload: { taskId: Schema.NonEmptyString },
+    success: Schema.Void,
+  }),
+  Rpc.make('conversation', {
+    error: PipesError,
+    payload: { taskId: Schema.NonEmptyString },
+    success: Schema.String,
+  }),
+  Rpc.make('jumpIn', {
+    error: PipesError,
+    payload: {
+      confirmedStopped: Schema.optionalKey(Schema.Boolean),
+      taskId: Schema.NonEmptyString,
+    },
+    success: Run,
+  }),
+  Rpc.make('handoffReport', {
+    error: PipesError,
+    payload: { result: StepResult, taskId: Schema.NonEmptyString, token: Schema.NonEmptyString },
+    success: Schema.Void,
+  }),
+  Rpc.make('handoffClose', {
+    error: PipesError,
+    payload: {
+      successful: Schema.Boolean,
+      taskId: Schema.NonEmptyString,
+      token: Schema.NonEmptyString,
+    },
+    success: Schema.Void,
   }),
   Rpc.make('snapshot', { error: PipesError, success: Snapshot }),
   Rpc.make('watch', { error: PipesError, stream: true, success: Snapshot }),

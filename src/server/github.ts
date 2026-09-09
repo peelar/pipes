@@ -1,9 +1,9 @@
-import { Context, Effect, Layer, Schema } from 'effect';
-import { FetchHttpClient, HttpClient, HttpClientResponse } from 'effect/unstable/http';
+import { Context, Effect, Layer, Schedule, Schema } from 'effect';
+import { FetchHttpClient, HttpBody, HttpClient, HttpClientResponse } from 'effect/unstable/http';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { decodeConfig, githubRepository, GitHubRepository, type Config } from '../config';
 import { Brief, GitHubConnection, PipesError, Title, type Repository } from '../protocol/pipes';
@@ -43,6 +43,30 @@ const Webhook = Schema.Struct({
   }),
 });
 
+const DeviceAuthorization = Schema.Struct({
+  device_code: Schema.NonEmptyString,
+  interval: Schema.Int,
+  user_code: Schema.NonEmptyString,
+  verification_uri: Schema.NonEmptyString,
+});
+
+const OAuthToken = Schema.Struct({
+  access_token: Schema.NonEmptyString,
+  expires_in: Schema.optionalKey(Schema.Int),
+  refresh_token: Schema.optionalKey(Schema.NonEmptyString),
+});
+
+const OAuthError = Schema.Struct({
+  error: Schema.NonEmptyString,
+  error_description: Schema.optionalKey(Schema.String),
+});
+
+const SavedCredential = Schema.Struct({
+  accessToken: Schema.NonEmptyString,
+  expiresAt: Schema.optionalKey(Schema.Int),
+  refreshToken: Schema.optionalKey(Schema.NonEmptyString),
+});
+
 const failure = (error?: unknown) =>
   Schema.is(PipesError)(error)
     ? error
@@ -63,6 +87,19 @@ export class GitHub extends Context.Service<
     identity: Effect.Effect<string, PipesError>;
     inspect: (path: string) => Effect.Effect<typeof GitHubConnection.Type, PipesError>;
     intake: (repositoryId: string) => Effect.Effect<number, PipesError>;
+    loginComplete: (input: {
+      deviceCode: string;
+      interval: number;
+    }) => Effect.Effect<string, PipesError>;
+    loginStart: Effect.Effect<
+      {
+        deviceCode: string;
+        interval: number;
+        userCode: string;
+        verificationUri: string;
+      },
+      PipesError
+    >;
     repositories: Effect.Effect<{ login: string; repositories: Array<string> }, PipesError>;
     startup: Effect.Effect<void>;
     webhook: (request: Request) => Promise<Response>;
@@ -92,7 +129,8 @@ export class GitHub extends Context.Service<
         );
         yield* Effect.logInfo(`GitHub webhook listening on 127.0.0.1:${port}/github`);
       }
-      yield* github.startup.pipe(Effect.forkScoped);
+      // ponytail: full scans are enough for personal repositories; add cursors or ETags when API usage matters.
+      yield* github.startup.pipe(Effect.repeat(Schedule.spaced('1 minute')), Effect.forkScoped);
     }),
   );
 
@@ -103,28 +141,76 @@ export class GitHub extends Context.Service<
       const context = yield* Effect.context<never>();
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);
-      const credential = Effect.gen(function* () {
-        const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
-        if (token) {
-          return token;
-        }
-        return yield* spawner
-          .string(
-            ChildProcess.make('gh', ['auth', 'token', '--hostname', 'github.com'], {
-              stderr: 'ignore',
-            }),
-          )
+      const clientId = 'Iv23li6GPuxwdLMQ3bjo';
+      const credentialFile = resolve(store.dataDirectory, 'github-token.json');
+      const oauth = Effect.fn('GitHub.oauth')(function* (
+        path: 'device/code' | 'oauth/access_token',
+        params: Record<string, string>,
+      ) {
+        return yield* client
+          .post(`https://github.com/login/${path}`, {
+            body: HttpBody.urlParams(params),
+            headers: { Accept: 'application/json' },
+          })
           .pipe(
-            Effect.map((value) => value.trim()),
-            Effect.timeout('5 seconds'),
-            Effect.mapError(
-              () =>
-                new PipesError({
-                  message:
-                    'Sign in with gh auth login, or set GH_TOKEN in the Pipes server environment, then retry.',
-                }),
-            ),
+            Effect.flatMap(HttpClientResponse.schemaBodyJson(Schema.Unknown)),
+            Effect.timeout('30 seconds'),
+            Effect.mapError(failure),
           );
+      });
+      const saveCredential = Effect.fn('GitHub.saveCredential')(function* (
+        token: typeof OAuthToken.Type,
+      ) {
+        // ponytail: a mode-0600 file is the cross-platform baseline; move it to an OS
+        // credential store when Pipes adopts one that works on both macOS and Linux.
+        yield* Effect.tryPromise({
+          catch: failure,
+          try: () =>
+            writeFile(
+              credentialFile,
+              JSON.stringify({
+                accessToken: token.access_token,
+                ...(token.expires_in ? { expiresAt: Date.now() + token.expires_in * 1000 } : {}),
+                ...(token.refresh_token ? { refreshToken: token.refresh_token } : {}),
+              }),
+              { mode: 0o600 },
+            ),
+        });
+        return token.access_token;
+      });
+      const credential = Effect.gen(function* () {
+        const saved = yield* Effect.tryPromise({
+          catch: () =>
+            new PipesError({
+              message: 'Sign in to GitHub through Pipes.',
+            }),
+          try: () => readFile(credentialFile, 'utf8'),
+        }).pipe(
+          Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(SavedCredential))),
+          Effect.mapError(failure),
+        );
+        if (!saved.expiresAt || saved.expiresAt > Date.now() + 60_000) {
+          return saved.accessToken;
+        }
+        if (!saved.refreshToken) {
+          return yield* new PipesError({
+            message: 'Your GitHub sign-in expired. Sign in again.',
+          });
+        }
+        const refreshed = yield* oauth('oauth/access_token', {
+          client_id: clientId,
+          grant_type: 'refresh_token',
+          refresh_token: saved.refreshToken,
+        }).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Schema.Union([OAuthToken, OAuthError]))),
+          Effect.mapError(failure),
+        );
+        if ('error' in refreshed) {
+          return yield* new PipesError({
+            message: refreshed.error_description ?? 'Your GitHub sign-in could not be refreshed.',
+          });
+        }
+        return yield* saveCredential(refreshed);
       });
       const get = Effect.fn('GitHub.get')(function* (path: string) {
         const token = yield* credential;
@@ -371,6 +457,46 @@ export class GitHub extends Context.Service<
           };
         }, Effect.mapError(failure)),
         intake,
+        loginComplete: Effect.fn('GitHub.loginComplete')(function* (input) {
+          let interval = Math.max(input.interval, 1);
+          for (;;) {
+            yield* Effect.sleep(`${interval} seconds`);
+            const result = yield* oauth('oauth/access_token', {
+              client_id: clientId,
+              device_code: input.deviceCode,
+              grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+            }).pipe(
+              Effect.flatMap(Schema.decodeUnknownEffect(Schema.Union([OAuthToken, OAuthError]))),
+              Effect.mapError(failure),
+            );
+            if ('access_token' in result) {
+              yield* saveCredential(result);
+              return yield* identity.pipe(Effect.map((user) => user.login));
+            }
+            if (result.error === 'authorization_pending') {
+              continue;
+            }
+            if (result.error === 'slow_down') {
+              interval += 5;
+              continue;
+            }
+            return yield* new PipesError({
+              message: result.error_description ?? 'GitHub sign-in did not complete.',
+            });
+          }
+        }),
+        loginStart: Effect.gen(function* () {
+          const result = yield* oauth('device/code', { client_id: clientId }).pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(DeviceAuthorization)),
+            Effect.mapError(failure),
+          );
+          return {
+            deviceCode: result.device_code,
+            interval: result.interval,
+            userCode: result.user_code,
+            verificationUri: result.verification_uri,
+          };
+        }),
         repositories: Effect.gen(function* () {
           const user = yield* identity;
           const repositories: Array<string> = [];

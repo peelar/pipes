@@ -2,7 +2,7 @@ import { Schema } from 'effect';
 
 const Text = Schema.String.check(Schema.isPattern(/\S/));
 export const GitHubRepository = Schema.String.check(
-  Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/),
+  Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.{1,2}$)[A-Za-z0-9_.-]+$/),
 );
 export const GitHubPolicy = Schema.Struct({
   assigned_to_me: Schema.optionalKey(Schema.Boolean),

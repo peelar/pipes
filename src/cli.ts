@@ -4,7 +4,19 @@ import { Effect } from 'effect';
 import { Command } from 'effect/unstable/cli';
 import { Client, ensureServer } from './client/connection';
 import { agent } from './cli/agent';
-import { github, list, register, shutdown, submit } from './cli/commands';
+import {
+  cancel,
+  conversation,
+  github,
+  handoffClose,
+  jumpIn,
+  list,
+  register,
+  shutdown,
+  start,
+  stop,
+  submit,
+} from './cli/commands';
 import { config } from './cli/config';
 import { connection } from './cli/connection';
 import { PipesError } from './protocol/pipes';
@@ -30,7 +42,21 @@ Command.make(
   }),
 ).pipe(
   Command.withDescription('Persistent local engineering task queue'),
-  Command.withSubcommands([agent, config, github, register, submit, list, shutdown]),
+  Command.withSubcommands([
+    agent,
+    config,
+    github,
+    register,
+    submit,
+    list,
+    start,
+    stop,
+    cancel,
+    conversation,
+    jumpIn,
+    handoffClose,
+    shutdown,
+  ]),
   Command.run({ version: '0.0.1' }),
   Effect.provide([Client.layer(connection), BunServices.layer, ObservabilityLayer]),
   BunRuntime.runMain,

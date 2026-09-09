@@ -7,18 +7,19 @@ import { Client } from '../client/connection';
 import { PipesError, Repository } from '../protocol/pipes';
 import { RepositoryConnection } from './repository-connection';
 
-test('connection UI offers local remotes, retries identity, selects workflows, and lists remote repositories', async () => {
+test('connection UI offers local remotes, signs in, selects workflows, and lists remote repositories', async () => {
   const repository = new Repository({ id: 'repo', name: 'repo', path: tmpdir() });
   const attached: Array<{ path: string; repository: string; workflow: string }> = [];
   const clones: Array<string> = [];
-  let identityFails = true;
+  const identityFails = true;
   let listingFails = true;
   const listing = Promise.withResolvers<void>();
+  let authentication = Promise.withResolvers<void>();
   let connected = 0;
   let localOnly = 0;
   let closed = 0;
   const inspection = Promise.withResolvers<void>();
-  let identity = Promise.withResolvers<void>();
+  const identity = Promise.withResolvers<void>();
   const runtime = ManagedRuntime.make(
     Layer.effect(
       Client,
@@ -47,6 +48,15 @@ test('connection UI offers local remotes, retries identity, selects workflows, a
             Effect.promise(async () => {
               await inspection.promise;
               return { remotes: ['peelar/pipes'], workflows: ['first', 'second'] };
+            }),
+          githubLoginComplete: () =>
+            Effect.promise(() => authentication.promise).pipe(Effect.as('peelar')),
+          githubLoginStart: () =>
+            Effect.succeed({
+              deviceCode: 'device-code',
+              interval: 5,
+              userCode: 'ABCD-1234',
+              verificationUri: 'https://github.com/login/device',
             }),
           githubRepositories: () =>
             Effect.promise(() => listing.promise).pipe(
@@ -120,19 +130,31 @@ test('connection UI offers local remotes, retries identity, selects workflows, a
     expect(view.captureCharFrame()).toContain('Sign in, then retry.');
     expect(view.captureCharFrame()).toContain('Check GitHub connection');
     expect(attached).toHaveLength(0);
-    identityFails = false;
-    identity = Promise.withResolvers<void>();
+    const loginSpawn = spyOn(Bun, 'spawn').mockReturnValue({
+      exited: Promise.resolve(0),
+    } as ReturnType<typeof Bun.spawn>);
     await press('RETURN');
-    expect(view.captureCharFrame()).toContain('Connecting…');
-    expect(view.captureCharFrame()).not.toContain('Check GitHub connection');
+    expect(loginSpawn).toHaveBeenCalledWith([
+      'open',
+      'https://github.com/apps/pipes-github/installations/new',
+    ]);
+    expect(view.captureCharFrame()).toContain(
+      'Choose the GitHub account and repositories Pipes may access.',
+    );
+    await press('RETURN');
+    expect(loginSpawn).toHaveBeenCalledWith(['open', 'https://github.com/login/device']);
+    expect(view.captureCharFrame()).toContain('ABCD-1234');
+    expect(view.captureCharFrame()).toContain('Waiting for GitHub approval…');
     await act(async () => {
-      identity.resolve();
+      authentication.resolve();
       await Bun.sleep(50);
     });
+    loginSpawn.mockRestore();
     await view.flush();
     expect(view.captureCharFrame()).toContain('Connected to GitHub as @peelar');
     expect(view.captureCharFrame()).not.toContain('Check GitHub connection');
     expect(view.captureCharFrame()).toContain('open issues assigned to you');
+    authentication = Promise.withResolvers<void>();
     await press('ARROW_DOWN');
     await press('RETURN');
     expect(attached).toEqual([{ path: tmpdir(), repository: 'peelar/pipes', workflow: 'second' }]);
@@ -148,38 +170,54 @@ test('connection UI offers local remotes, retries identity, selects workflows, a
     expect(attached).toHaveLength(1);
     await destroy();
     view = await render();
-    await view.waitForFrame((frame) => frame.includes('[Local]'));
-    await press('TAB');
+    await act(async () => {
+      await Bun.sleep(50);
+    });
+    await view.waitForFrame((frame) => frame.includes('Browse local directories'));
+    expect(view.captureCharFrame()).toContain('Clone from GitHub');
+    expect(view.captureCharFrame()).not.toContain('Local');
+    await press('ARROW_DOWN');
+    await press('RETURN');
     expect(view.captureCharFrame()).toContain('Loading GitHub repositories…');
     expect(view.captureCharFrame()).not.toContain('another/project');
     await act(async () => {
       listing.resolve();
       await Bun.sleep(50);
     });
-    await view.waitForFrame((frame) => frame.includes('Sign in to GitHub'));
-    const authentication = Promise.withResolvers<number>();
+    await view.waitForFrame((frame) => frame.includes('Connect GitHub'));
     const spawn = spyOn(Bun, 'spawn').mockReturnValue({
-      exited: authentication.promise,
+      exited: Promise.resolve(0),
     } as ReturnType<typeof Bun.spawn>);
     try {
       await press('RETURN');
-      expect(spawn).toHaveBeenCalledWith(
-        ['gh', 'auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web'],
-        { stderr: 'inherit', stdin: 'ignore', stdout: 'inherit' },
+      expect(spawn).toHaveBeenCalledWith([
+        'open',
+        'https://github.com/apps/pipes-github/installations/new',
+      ]);
+      expect(view.captureCharFrame()).toContain(
+        'Choose the GitHub account and repositories Pipes may access.',
       );
+      await press('RETURN');
+      expect(spawn).toHaveBeenCalledWith(['open', 'https://github.com/login/device']);
+      expect(view.captureCharFrame()).toContain('ABCD-1234');
+      expect(view.captureCharFrame()).toContain('Waiting for GitHub approval…');
       listingFails = false;
       await act(async () => {
-        authentication.resolve(0);
+        authentication.resolve();
         await Bun.sleep(50);
       });
     } finally {
       spawn.mockRestore();
     }
     await view.waitForFrame((frame) => frame.includes('another/project'));
-    expect(view.captureCharFrame()).toContain('[Remote]');
-    await press('TAB');
-    expect(view.captureCharFrame()).toContain('[Local]');
-    await press('TAB');
+    expect(view.captureCharFrame()).toContain('[b] back');
+    await press('b');
+    await act(async () => {
+      await Bun.sleep(50);
+    });
+    await view.waitForFrame((frame) => frame.includes('Browse local directories'));
+    await press('ARROW_DOWN');
+    await press('RETURN');
     await view.waitForFrame((frame) => frame.includes('another/project'));
     expect(view.captureCharFrame()).toContain('Only connect repositories you trust');
     await press('RETURN');
