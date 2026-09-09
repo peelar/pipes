@@ -144,7 +144,7 @@ Lease expiration signals uncertainty, not proof that a worker stopped. Confirm t
 
 The first TUI launch shows an animated Pipes logo before repository onboarding. Later launches skip it.
 
-A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/config.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through the Agent tab in [m] manage. Pipes includes its agent adapters and runtimes; users do not install Codex, ACP adapters, Node, or package managers separately. Authentication uses the user’s account through Pipes.
+A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/config.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through the Agent tab in [m] manage. Pipes bundles its ACP adapter. It expects a `codex` CLI on PATH and authenticates through the user's Codex account; installing Codex separately is required for now. Bundling the Codex engine inside Pipes is deferred.
 
 The Codex connection step only checks availability and authentication, showing “Connected to Codex” on success. The separate configuration step shows a compact addition diff of the example configuration, with abbreviated agent settings and prompts, without repeating the connection status. Agent settings are defined per workflow step rather than for the connection.
 
@@ -203,7 +203,7 @@ The split is: **Effect owns execution; SQLite provides durability; Pipes owns wo
 
 The provider setting is an enum with only `codex` supported initially. Allow an optional custom ACP command override for that provider. Add other provider values explicitly as support is implemented.
 
-Support macOS and Linux; Windows users can use WSL. Ship an executable or release bundle containing the Pipes runtime. Include the supported agent runtime and adapter in the distribution. Source development may require build tools; the installed product must not require users to install dependencies separately.
+Support macOS and Linux; Windows users can use WSL. Ship a single executable containing the Pipes runtime and its ACP adapter. The Codex engine is expected on PATH for now; bundling it is deferred. Source development may require build tools; the installed product requires only the binary plus a `codex` CLI, not Bun, Node, or package managers.
 
 ## Deferred
 

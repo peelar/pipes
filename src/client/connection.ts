@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { selfCommand } from '../self';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/unstable/http';
 import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
@@ -80,19 +80,16 @@ export const ensureServer = Effect.fn('ensureServer')(function* (
     try: () => {
       const log = openSync(join(connection.directory, 'server.log'), 'a', 0o600);
       try {
-        const child = spawn(
-          process.execPath,
-          [fileURLToPath(new URL('../server.ts', import.meta.url))],
-          {
-            detached: true,
-            env: {
-              ...process.env,
-              PIPES_DATA_DIR: connection.directory,
-              PIPES_PORT: String(connection.port),
-            },
-            stdio: ['ignore', log, log],
+        const { args, executable } = selfCommand(['__server']);
+        const child = spawn(executable, args, {
+          detached: true,
+          env: {
+            ...process.env,
+            PIPES_DATA_DIR: connection.directory,
+            PIPES_PORT: String(connection.port),
           },
-        );
+          stdio: ['ignore', log, log],
+        });
         child.on('error', () => {});
         child.unref();
       } finally {

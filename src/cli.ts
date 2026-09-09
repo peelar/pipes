@@ -22,6 +22,7 @@ import { connection } from './cli/connection';
 import { mcp } from './cli/mcp';
 import { PipesError } from './protocol/pipes';
 import { ObservabilityLayer } from './observability';
+import { version } from './version';
 
 Command.make(
   'pipes',
@@ -61,7 +62,7 @@ Command.make(
     handoffClose,
     shutdown,
   ]),
-  Command.run({ version: '0.0.1' }),
+  Command.run({ version }),
   Effect.provide([Client.layer(connection), BunServices.layer, ObservabilityLayer]),
   BunRuntime.runMain,
 );

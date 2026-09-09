@@ -4,11 +4,10 @@ import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import { Config, type Agent } from '../config';
 import { PipesError, type Run, type StepResult } from '../protocol/pipes';
-import { openCodex, probeCodex } from './codex';
+import { selfCommand } from '../self';
+import { codexBinary, openCodex, probeCodex } from './codex';
 import { resultMcp } from './result-mcp';
 
 const failure = (error: unknown) =>
@@ -20,9 +19,7 @@ type Report = (result: typeof StepResult.Type) => Promise<void>;
 export function resumeArguments(run: Run, url: string) {
   const attempt = run.attempts.at(-1)!;
   return [
-    createRequire(fileURLToPath(import.meta.resolve('@agentclientprotocol/codex-acp'))).resolve(
-      '@openai/codex/bin/codex.js',
-    ),
+    codexBinary,
     'resume',
     attempt.sessionId!,
     '--cd',
@@ -64,13 +61,8 @@ export class Environment extends Context.Service<
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const configuration = Effect.fn('Environment.configuration')(function* (repository: string) {
-        const output = yield* spawner.string(
-          ChildProcess.make(process.execPath, [
-            resolve(import.meta.dir, '../cli.ts'),
-            'config',
-            repository,
-          ]),
-        );
+        const { args, executable } = selfCommand(['config', repository]);
+        const output = yield* spawner.string(ChildProcess.make(executable, args));
         return yield* Schema.decodeEffect(Schema.fromJsonString(Config))(output);
       }, Effect.mapError(failure));
       const exists = Effect.fn('Environment.exists')(function* (run: Run) {
@@ -144,8 +136,9 @@ export class Environment extends Context.Service<
             Effect.try({ catch: failure, try: () => resultMcp(report) }),
             ({ server }) => Effect.promise(() => server.stop(true)),
           );
+          const resumeArgs = resumeArguments(run, mcp.configuration.url);
           const handle = yield* spawner.spawn(
-            ChildProcess.make(process.execPath, resumeArguments(run, mcp.configuration.url), {
+            ChildProcess.make(resumeArgs[0]!, resumeArgs.slice(1), {
               cwd: run.workspace,
               detached: false,
               env: {

@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { decodeConfig, githubRepository, GitHubRepository, type Config } from '../config';
 import { Brief, GitHubConnection, PipesError, Title, type Repository } from '../protocol/pipes';
 import { Store } from './store';
+import { selfCommand } from '../self';
 
 export const GitHubIssue = Schema.Struct({
   assignees: Schema.Array(Schema.Struct({ id: Schema.Int })),
@@ -232,13 +233,8 @@ export class GitHub extends Context.Service<
         if (!existsSync(resolve(path, '.pipes/config.ts'))) {
           return undefined;
         }
-        const output = yield* spawner.string(
-          ChildProcess.make(process.execPath, [
-            resolve(import.meta.dir, '../cli.ts'),
-            'config',
-            path,
-          ]),
-        );
+        const { args, executable } = selfCommand(['config', path]);
+        const output = yield* spawner.string(ChildProcess.make(executable, args));
         const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(output);
         return yield* decodeConfig(value);
       }, Effect.mapError(failure));

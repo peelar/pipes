@@ -86,7 +86,7 @@ test('native handoff inherits the terminal and closes ownership only after the c
               if (command._tag !== 'StandardCommand') {
                 throw new Error('Expected a native command');
               }
-              expect(command.args.slice(1, 5)).toEqual([
+              expect(command.args.slice(0, 4)).toEqual([
                 'resume',
                 'saved-session',
                 '--cd',

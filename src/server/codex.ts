@@ -12,9 +12,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Agent, decodeConfig } from '../config';
 import { CodexProbe, CodexSettings, PipesError } from '../protocol/pipes';
+import { selfCommand } from '../self';
+import { version } from '../version';
+import skillText from '../../skills/pipes/SKILL.md' with { type: 'text' };
 
 const authRequired = Schema.is(Schema.Struct({ code: Schema.Literal(-32_000) }));
 const errorMessage = Schema.is(Schema.Struct({ message: Schema.String }));
@@ -30,10 +32,10 @@ export const codexSkillPath = (home = homedir()) =>
 
 export const codexSkillInstalled = (home = homedir()) => existsSync(codexSkillPath(home));
 
-const codexCommand = fileURLToPath(import.meta.resolve('@openai/codex/bin/codex.js'));
-const pipesCommand = fileURLToPath(new URL('../cli.ts', import.meta.url));
+// Phase 1 distribution expects a `codex` CLI on PATH; bundling the engine is deferred.
+export const codexBinary = process.env.PIPES_CODEX_BIN ?? process.env.CODEX_PATH ?? 'codex';
 const codexMcp = (home: string, args: Array<string>) =>
-  ChildProcess.make(process.execPath, [codexCommand, 'mcp', ...args], {
+  ChildProcess.make(codexBinary, ['mcp', ...args], {
     env: { CODEX_HOME: join(home, '.codex') },
     extendEnv: true,
   });
@@ -60,11 +62,7 @@ export const installCodex = Effect.fn('installCodex')(function* (home = homedir(
       await mkdir(join(home, '.codex'), { recursive: true });
       await mkdir(dirname(filename), { recursive: true });
       try {
-        await writeFile(
-          filename,
-          await Bun.file(new URL('../../skills/pipes/SKILL.md', import.meta.url)).text(),
-          { flag: 'wx' },
-        );
+        await writeFile(filename, skillText, { flag: 'wx' });
       } catch (error) {
         if (!Schema.is(Schema.Struct({ code: Schema.Literal('EEXIST') }))(error)) {
           throw error;
@@ -74,8 +72,9 @@ export const installCodex = Effect.fn('installCodex')(function* (home = homedir(
   });
   if (!(yield* codexMcpInstalled(home))) {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const self = selfCommand(['mcp']);
     yield* spawner
-      .string(codexMcp(home, ['add', 'pipes', '--', process.execPath, pipesCommand, 'mcp']))
+      .string(codexMcp(home, ['add', 'pipes', '--', self.executable, ...self.args]))
       .pipe(
         Effect.mapError(
           (error) =>
@@ -108,17 +107,19 @@ export const openCodex = Effect.fn('openCodex')(function* (
   execution?: { mcpServers: Array<McpServer>; update: (notification: SessionNotification) => void },
 ) {
   const request = yield* Schema.decodeEffect(CodexProbe)(input).pipe(Effect.mapError(acpError));
-  const command = request.command ?? [
-    process.execPath,
-    fileURLToPath(import.meta.resolve('@agentclientprotocol/codex-acp')),
-  ];
+  // The adapter ships inside the Pipes binary and uses the system Codex engine.
+  const self = selfCommand(['__codex-acp']);
+  const adapterCommand: ReadonlyArray<string> = request.command ?? [self.executable, ...self.args];
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const outgoing = new TransformStream<Uint8Array, Uint8Array>();
   const handle = yield* spawner
     .spawn(
-      ChildProcess.make(command[0]!, command.slice(1), {
+      ChildProcess.make(adapterCommand[0]!, adapterCommand.slice(1), {
         cwd: resolve(request.path),
-        env: { INITIAL_AGENT_MODE: execution ? 'agent-full-access' : 'read-only' },
+        env: {
+          CODEX_PATH: codexBinary,
+          INITIAL_AGENT_MODE: execution ? 'agent-full-access' : 'read-only',
+        },
         extendEnv: true,
         forceKillAfter: '2 seconds',
         stdin: Stream.fromReadableStream({
@@ -139,7 +140,7 @@ export const openCodex = Effect.fn('openCodex')(function* (
       Effect.mapError(
         () =>
           new PipesError({
-            message: `Cannot launch ${command[0]} in ${request.path}. Check the repository directory and any custom command. The default adapter is included with Pipes; reinstall Pipes if its files are missing.`,
+            message: `Cannot launch ${adapterCommand[0]} in ${request.path}. Check the repository directory and any custom command. The default adapter ships inside the Pipes binary; update or reinstall Pipes if launching it fails.`,
           }),
       ),
     );
@@ -166,7 +167,7 @@ export const openCodex = Effect.fn('openCodex')(function* (
     try: async () => {
       const initialized = await connection.agent.request('initialize', {
         clientCapabilities: {},
-        clientInfo: { name: 'pipes', version: '0.0.1' },
+        clientInfo: { name: 'pipes', version },
         protocolVersion: PROTOCOL_VERSION,
       });
       if (initialized.protocolVersion !== PROTOCOL_VERSION) {
@@ -299,9 +300,8 @@ export const checkCodexConfig = Effect.fn('checkCodexConfig')(
   function* (path: string) {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     // A fresh process also reloads imported workflow files after the user edits them.
-    const output = yield* spawner.string(
-      ChildProcess.make(process.execPath, [resolve(import.meta.dir, '../cli.ts'), 'config', path]),
-    );
+    const { args, executable } = selfCommand(['config', path]);
+    const output = yield* spawner.string(ChildProcess.make(executable, args));
     const configuration = yield* decodeConfig(
       yield* Effect.try({
         catch: (error) => new PipesError({ message: output.trim() || String(error) }),

@@ -1,0 +1,42 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            targets: ['bun-darwin-arm64', 'bun-darwin-x64-baseline']
+          - runner: ubuntu-22.04
+            targets: ['bun-linux-x64-baseline']
+          - runner: ubuntu-24.04-arm
+            targets: ['bun-linux-arm64']
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Fetch native packages the installer filters out
+        # Bun skips platform-mismatched packages, but cross-compiling the
+        # darwin-x64 binary on an arm64 runner needs its native binding.
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          rm -rf /tmp/native-fetch && mkdir -p /tmp/native-fetch
+          cd /tmp/native-fetch
+          npm pack @opentui/core-darwin-x64@0.5.11
+          mkdir -p unpack && tar -xzf opentui-core-darwin-x64-0.5.11.tgz -C unpack
+          rm -rf "$GITHUB_WORKSPACE/node_modules/@opentui/core-darwin-x64"
+          cp -r unpack/package "$GITHUB_WORKSPACE/node_modules/@opentui/core-darwin-x64"
+      - name: Build
+        run: |
+          set -eu
+          for target in ${{ join(matrix.targets, ' ') }}; do
+            bun scripts/build.ts --target "$target"
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/pipes-*

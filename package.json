@@ -13,6 +13,7 @@
   "scripts": {
     "reset": "bun scripts/reset.ts",
     "dev": "bun --watch src/dev.ts",
+    "build": "bun scripts/build.ts",
     "pipes": "bun src/cli.ts",
     "pipesd": "bun src/server.ts",
     "test": "bun test",
@@ -35,6 +36,9 @@
   "devDependencies": {
     "@effect/tsgo": "0.43.0",
     "@nkzw/oxlint-config": "2.0.1",
+    "@opentui/core-darwin-x64": "0.5.11",
+    "@opentui/core-linux-arm64": "0.5.11",
+    "@opentui/core-linux-x64": "0.5.11",
     "@types/bun": "latest",
     "@types/react": "latest",
     "oxlint": "1.81.0",

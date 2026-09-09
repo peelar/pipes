@@ -16,6 +16,7 @@ test('dev applies pending migrations before opening the TUI on startup and watch
   try {
     await writeFile(join(directory, 'token'), connection.token, { mode: 0o600 });
     await cp('src', join(directory, 'src'), { recursive: true });
+    await cp('skills', join(directory, 'skills'), { recursive: true });
     await cp('tsconfig.json', join(directory, 'tsconfig.json'));
     await symlink(resolve('node_modules'), join(directory, 'node_modules'));
     const repositoryPath = join(directory, 'project');

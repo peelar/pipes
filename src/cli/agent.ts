@@ -2,9 +2,9 @@ import { Console, Effect, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { AgentCommand } from '../config';
 import { PipesError } from '../protocol/pipes';
+import { selfCommand } from '../self';
 import { connect } from './connection';
 
 export const agent = Command.make(
@@ -58,12 +58,13 @@ export const agent = Command.make(
       {},
       Effect.fn(function* () {
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const { args, executable } = selfCommand(['__codex-acp', 'cli', 'login']);
         const handle = yield* spawner.spawn(
-          ChildProcess.make(
-            process.execPath,
-            [fileURLToPath(import.meta.resolve('@agentclientprotocol/codex-acp')), 'cli', 'login'],
-            { stderr: 'inherit', stdin: 'inherit', stdout: 'inherit' },
-          ),
+          ChildProcess.make(executable, args, {
+            stderr: 'inherit',
+            stdin: 'inherit',
+            stdout: 'inherit',
+          }),
         );
         const code = yield* handle.exitCode;
         if (code !== 0) {
