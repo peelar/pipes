@@ -1,6 +1,8 @@
 # Pipes design contract
 
-This records the agreed product and architecture. It is not a roadmap or task list.
+This records product and architecture intent that is not yet clear from code, including unresolved decisions and features that do not exist yet. It is not a roadmap or task list.
+
+Code becomes the source of truth once a feature's full shape is established in its implementation. Remove the corresponding design text instead of adding or maintaining a duplicate description here. Keep only intent and constraints that the code does not yet express.
 
 - **Agreed:** preserve this unless the user changes it.
 - **Deferred:** discussed, but outside the initial scope.
@@ -135,7 +137,7 @@ Lease expiration signals uncertainty, not proof that a worker stopped. Confirm t
 
 The first TUI launch shows an animated Pipes logo before repository onboarding. Later launches skip it.
 
-A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/pipes.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through [a]. GitHub connection is deferred. Pipes includes its agent adapters and runtimes; users do not install Codex, ACP adapters, Node, or package managers separately. Authentication uses the user’s account through Pipes.
+A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/pipes.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through [a]. Pipes includes its agent adapters and runtimes; users do not install Codex, ACP adapters, Node, or package managers separately. Authentication uses the user’s account through Pipes.
 
 The Codex connection step only checks availability and authentication, showing “Connected to Codex” on success. The separate configuration step shows a compact addition diff of the example configuration, with abbreviated agent settings and prompts, without repeating the connection status. Agent settings are defined per workflow step rather than for the connection.
 
@@ -147,9 +149,9 @@ For local registration, the TUI detects the repository containing its launch dir
 
 GitHub is a continuous source, alongside manual submission through Pipes interfaces. Source mechanisms are abstract: GitHub uses webhooks; other sources may poll. Users provide reachable webhook connectivity, such as an endpoint or tunnel. Pipes requires no Pipes-operated relay.
 
-Code configuration selects eligible work and routes it to a workflow, including whether it starts automatically. Manual callers can select a workflow directly. The only initial source filter is `assigned_to_me: true/false`; the exact meaning of `false` remains open.
+When execution is implemented, code configuration will also determine whether admitted tasks start automatically. Manual callers can select a workflow directly.
 
-Admit existing matching issues when watching starts. Maintain one task per source issue. Repeated observations do not create another task or run, rewrite the captured request, or reopen a closed task. Initial source content is a snapshot plus a link. Source synchronization and progress updates back to GitHub are deferred.
+Future run and task lifecycle operations must preserve source deduplication: repeated observations must not create another run or reopen a closed task. Source synchronization and progress updates back to GitHub are deferred.
 
 ## Interfaces
 

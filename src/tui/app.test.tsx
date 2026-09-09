@@ -370,12 +370,14 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
       view!.mockInput.pressKey('c');
       await Bun.sleep(100);
     });
-    expect(view.captureCharFrame()).toContain(`Connected: ${repository.name}`);
+    expect(view.captureCharFrame()).toContain('Reading directory…');
+    expect(view.captureCharFrame()).not.toContain(`Connected: ${repository.name}`);
     expect(view.captureCharFrame()).not.toContain('Connect this repository');
     await act(async () => {
       await Bun.sleep(100);
     });
     await view.waitForFrame((frame) => frame.includes('Git repository:'));
+    expect(view.captureCharFrame()).toContain(`Connected: ${repository.name}`);
     await act(async () => {
       view!.mockInput.pressKey('ARROW_LEFT');
       await Bun.sleep(100);

@@ -5,6 +5,16 @@ import { Client, ensureServer } from '../client/connection';
 import { Brief, Title } from '../protocol/pipes';
 import { connect, connection } from './connection';
 
+export const github = Command.make(
+  'github',
+  { repo: Flag.string('repo').pipe(Flag.withDescription('Registered repository ID')) },
+  Effect.fn(function* ({ repo }) {
+    const client = yield* connect;
+    const matched = yield* client.githubIntake({ repositoryId: repo });
+    yield* Console.log(`Observed ${matched} matching issues; existing tasks were preserved.`);
+  }),
+);
+
 export const register = Command.make(
   'register',
   { path: Argument.string('path') },

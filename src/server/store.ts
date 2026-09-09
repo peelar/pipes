@@ -16,7 +16,10 @@ export class Store extends Context.Service<
     readonly submit: (input: {
       brief: string;
       repositoryId: string;
+      sourceId?: string;
+      sourceUrl?: string;
       title: string;
+      workflow?: string;
     }) => Effect.Effect<Task, PipesError>;
     readonly watch: Stream.Stream<Snapshot, PipesError>;
   }
@@ -43,6 +46,12 @@ export class Store extends Context.Service<
           id INTEGER PRIMARY KEY AUTOINCREMENT, taskId TEXT NOT NULL REFERENCES tasks(id),
           kind TEXT NOT NULL CHECK(kind = 'submitted'), createdAt TEXT NOT NULL
         )`;
+            }),
+            '0002_sources': Effect.gen(function* () {
+              yield* sql`ALTER TABLE tasks ADD COLUMN sourceId TEXT`;
+              yield* sql`ALTER TABLE tasks ADD COLUMN sourceUrl TEXT`;
+              yield* sql`ALTER TABLE tasks ADD COLUMN workflow TEXT`;
+              yield* sql`CREATE UNIQUE INDEX tasks_source ON tasks(sourceId) WHERE sourceId IS NOT NULL`;
             }),
           }),
         });
@@ -91,7 +100,10 @@ export class Store extends Context.Service<
         const submit = Effect.fn('Store.submit')(function* (input: {
           brief: string;
           repositoryId: string;
+          sourceId?: string;
+          sourceUrl?: string;
           title: string;
+          workflow?: string;
         }) {
           const task = yield* Schema.decodeEffect(Task)({
             ...input,
@@ -102,6 +114,15 @@ export class Store extends Context.Service<
           return yield* sql
             .withTransaction(
               Effect.gen(function* () {
+                if (input.sourceId) {
+                  const existing =
+                    yield* sql`SELECT * FROM tasks WHERE sourceId = ${input.sourceId}`;
+                  if (existing.length) {
+                    return yield* Schema.decodeUnknownEffect(Task)(existing[0]).pipe(
+                      Effect.mapError(databaseError),
+                    );
+                  }
+                }
                 const repositories =
                   yield* sql`SELECT id FROM repositories WHERE id = ${input.repositoryId}`;
                 if (repositories.length === 0) {

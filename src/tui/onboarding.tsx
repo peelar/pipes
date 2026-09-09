@@ -1,11 +1,10 @@
-import { useKeyboard } from '@opentui/react';
-import { Effect, Schema, type ManagedRuntime } from 'effect';
+import { Schema, type ManagedRuntime } from 'effect';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { useState } from 'react';
 import { Client } from '../client/connection';
 import { CodexSetup } from './codex-setup';
-import { RepositoryPicker } from './repository-picker';
+import { RepositoryConnection } from './repository-connection';
 
 const Progress = Schema.Struct({
   complete: Schema.Boolean,
@@ -36,25 +35,17 @@ export function Onboarding({
   runtime: ManagedRuntime.ManagedRuntime<Client, never>;
   startDirectory: string;
 }) {
-  const [state, setState] = useState<
-    | { status: 'repository' }
-    | { status: 'registering' }
-    | { error: string; status: 'failed' }
-    | { path: string; status: 'codex' }
-  >(() => {
-    const { path } = readOnboarding(directory);
-    return path ? { path, status: 'codex' } : { status: 'repository' };
-  });
+  const [state, setState] = useState<{ status: 'repository' } | { path: string; status: 'codex' }>(
+    () => {
+      const { path } = readOnboarding(directory);
+      return path ? { path, status: 'codex' } : { status: 'repository' };
+    },
+  );
   const persist = (next: typeof Progress.Type) => {
     const filename = join(directory, 'onboarding.json');
     writeFileSync(`${filename}.tmp`, JSON.stringify(next), { mode: 0o600 });
     renameSync(`${filename}.tmp`, filename);
   };
-  useKeyboard((key) => {
-    if (key.name === 'escape' && (state.status === 'repository' || state.status === 'failed')) {
-      onClose();
-    }
-  });
   if (state.status === 'codex') {
     const { path } = state;
     return (
@@ -94,25 +85,16 @@ export function Onboarding({
         <text>
           Welcome to Pipes. Connect a Git repository, set up Codex, then configure a workflow.
         </text>
-        <RepositoryPicker
-          busy={state.status === 'registering'}
-          onRegister={(selected) => {
-            if (state.status === 'registering') {
-              return;
-            }
-            setState({ status: 'registering' });
-            void runtime
-              .runPromise(Effect.flatMap(Client, (client) => client.register({ path: selected })))
-              .then((repository) => {
-                persist({ complete: false, path: repository.path });
-                setState({ path: repository.path, status: 'codex' });
-              })
-              .catch((error: unknown) => setState({ error: String(error), status: 'failed' }));
+        <RepositoryConnection
+          onClose={() => onClose()}
+          onConnected={(repository) => {
+            persist({ complete: false, path: repository.path });
+            setState({ path: repository.path, status: 'codex' });
           }}
+          runtime={runtime}
           startDirectory={startDirectory}
         />
         <text>[Esc] finish later · Setup resumes next launch</text>
-        {state.status === 'failed' && <text fg="#f38ba8">{state.error}</text>}
       </box>
     </box>
   );

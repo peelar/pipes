@@ -169,11 +169,13 @@ export async function completePath(value: string, base: string) {
 
 export function RepositoryPicker({
   busy,
+  onGitHub,
   onRegister,
   repositories = [],
   startDirectory,
 }: {
   busy: boolean;
+  onGitHub?: () => void;
   onRegister: (path: string) => void;
   repositories?: ReadonlyArray<{ name: string; path: string }>;
   startDirectory: string;
@@ -218,6 +220,8 @@ export function RepositoryPicker({
           })
           .catch((error: unknown) => setMessage(String(error)));
       }
+    } else if (key.name === 'g' && onGitHub) {
+      onGitHub();
     } else if (key.name === 'p') {
       setPath('');
       setEditing(true);
@@ -229,7 +233,7 @@ export function RepositoryPicker({
   const options = [
     ...(ready &&
     listing.root &&
-    !repositories.some((repository) => repository.path === listing.root)
+    (onGitHub || !repositories.some((repository) => repository.path === listing.root))
       ? [
           {
             action: 'register' as const,
@@ -268,7 +272,7 @@ export function RepositoryPicker({
       flexShrink={0}
       height={12}
       padding={1}
-      title="Connect repository · [Enter] selects · [←] parent · [p] path · [Esc] cancels"
+      title={`Connect${onGitHub ? ' · [g] GitHub' : ''} · [Enter] selects · [←] parent · [p] path · [Esc] cancels`}
     >
       <text>{directory}</text>
       <text fg="#a6e3a1">
@@ -291,7 +295,7 @@ export function RepositoryPicker({
           placeholder="Path (relative to displayed directory) · [Tab] completes · [Enter] opens"
           value={path}
         />
-      ) : (
+      ) : ready ? (
         <select
           flexGrow={1}
           focused={!busy}
@@ -310,7 +314,7 @@ export function RepositoryPicker({
           options={options}
           showScrollIndicator
         />
-      )}
+      ) : null}
       {message && <text fg="#f9e2af">{message}</text>}
     </box>
   );

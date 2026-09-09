@@ -1,26 +1,27 @@
 import { createCliRenderer, type TextareaRenderable } from '@opentui/core';
 import { createRoot, useKeyboard } from '@opentui/react';
-import { Effect, ManagedRuntime, Stream } from 'effect';
+import { Effect, Layer, ManagedRuntime, Stream } from 'effect';
 import { useEffect, useRef, useState } from 'react';
 import { Client, type Connection } from '../client/connection';
-import { Snapshot, type Repository } from '../protocol/pipes';
-import { ConnectRepository, RepositoryPicker, useSuggestedRoot } from './repository-picker';
+import { ObservabilityLayer } from '../observability';
+import { Snapshot } from '../protocol/pipes';
+import { ConnectRepository, useSuggestedRoot } from './repository-picker';
+import { RepositoryConnection } from './repository-connection';
 import { claimWelcome, Welcome } from './welcome';
 import { Onboarding, readOnboarding } from './onboarding';
 import { CodexSetup } from './codex-setup';
 
 type Runtime = ReturnType<typeof makeRuntime>;
-const makeRuntime = (connection: Connection) => ManagedRuntime.make(Client.layer(connection));
+const makeRuntime = (connection: Connection) =>
+  ManagedRuntime.make(Client.layer(connection).pipe(Layer.provide(ObservabilityLayer)));
 const empty = new Snapshot({ repositories: [], tasks: [], transitions: [] });
 
 function paneFocused(mode: string, pane: string, target: string, modal: string | undefined) {
   return mode === 'queue' && pane === target && !modal;
 }
 
-function shortcuts(busy: boolean, repository: Repository | undefined) {
-  return busy
-    ? 'Saving…'
-    : `[↑↓] scroll  [←→] pane  [n] new  [c] connect  [a] agent  [Tab] repo (${repository?.name ?? 'none'})  [q] detach`;
+function shortcuts(busy: boolean) {
+  return busy ? 'Saving…' : '[↑↓] scroll  [←→] pane  [n] new  [c] connect  [a] agent  [q] quit';
 }
 
 export function App({
@@ -45,6 +46,7 @@ export function App({
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [agentSetup, setAgentSetup] = useState<string>();
+  const [connectionPath, setConnectionPath] = useState<string>();
   const [onboarding, setOnboarding] = useState(() =>
     onboardingDirectory && !readOnboarding(onboardingDirectory).complete
       ? onboardingDirectory
@@ -115,7 +117,7 @@ export function App({
   };
 
   useKeyboard((key) => {
-    if (modal) {
+    if (modal || mode === 'register') {
       return;
     }
     if (key.name === 'escape' && !busy) {
@@ -195,6 +197,7 @@ export function App({
                 {task.id}
                 {'\n\n'}
               </text>
+              <text fg="#a6adc8">{[task.sourceUrl, task.workflow].filter(Boolean).join('\n')}</text>
               <text>
                 {task.brief || 'No brief supplied.'}
                 {'\n\n'}
@@ -215,10 +218,18 @@ export function App({
         </box>
       </box>
       {mode === 'register' && (
-        <RepositoryPicker
-          busy={busy}
-          onRegister={(path) => save(Effect.flatMap(Client, (client) => client.register({ path })))}
+        <RepositoryConnection
+          initialPath={connectionPath}
+          onClose={() => {
+            setConnectionPath(undefined);
+            setMode('queue');
+          }}
+          onConnected={() => {
+            setConnectionPath(undefined);
+            setMode('queue');
+          }}
           repositories={snapshot.repositories}
+          runtime={runtime}
           startDirectory={startDirectory}
         />
       )}
@@ -259,14 +270,16 @@ export function App({
       )}
       {success && <text fg="#a6e3a1">✓ Setup complete · {success}</text>}
       {error && <text fg="#f38ba8">{error}</text>}
-      <text fg="#a6adc8">{shortcuts(busy, repository)}</text>
+      <text fg="#a6adc8">{shortcuts(busy)}</text>
       {suggestedRoot && (
         <ConnectRepository
           busy={busy}
           error={error}
-          onConfirm={() =>
-            save(Effect.flatMap(Client, (client) => client.register({ path: suggestedRoot })))
-          }
+          onConfirm={() => {
+            setConnectionPath(suggestedRoot);
+            dismissSuggestion();
+            setMode('register');
+          }}
           onDecline={dismissSuggestion}
           path={suggestedRoot}
         />
@@ -298,13 +311,18 @@ export function App({
   );
 }
 
-export async function launch(connection: Connection) {
+export async function launch(connection: Connection, signal?: AbortSignal) {
   const runtime = makeRuntime(connection);
   const { promise: closed, resolve: finish } = Promise.withResolvers<void>();
   const renderer = await createCliRenderer({ exitOnCtrlC: true, onDestroy: () => finish() });
+  const abort = () => renderer.destroy();
+  signal?.addEventListener('abort', abort, { once: true });
   const root = createRoot(renderer);
   const firstLaunch = claimWelcome(connection.directory);
   try {
+    if (signal?.aborted) {
+      return;
+    }
     root.render(
       <Welcome firstLaunch={firstLaunch}>
         <App
@@ -316,6 +334,7 @@ export async function launch(connection: Connection) {
     );
     await closed;
   } finally {
+    signal?.removeEventListener('abort', abort);
     root.unmount();
     renderer.destroy();
     await runtime.dispose();

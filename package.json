@@ -12,7 +12,7 @@
   },
   "scripts": {
     "reset": "bun scripts/reset.ts",
-    "dev": "bun --watch src/cli.ts",
+    "dev": "bun --watch src/dev.ts",
     "pipes": "bun src/cli.ts",
     "pipesd": "bun src/server.ts",
     "test": "bun test",

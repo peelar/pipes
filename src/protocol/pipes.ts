@@ -1,6 +1,12 @@
 import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
-import { Agent, AgentCommand } from '../config';
+import { Agent, AgentCommand, GitHubPolicy, GitHubRepository } from '../config';
+
+export const GitHubConnection = Schema.Struct({
+  policy: Schema.optionalKey(GitHubPolicy),
+  remotes: Schema.Array(GitHubRepository),
+  workflows: Schema.Array(Schema.String),
+});
 
 const AgentChoice = Schema.Struct({ name: Schema.String, value: Schema.NonEmptyString });
 export class CodexSettings extends Schema.Class<CodexSettings>('CodexSettings')({
@@ -33,8 +39,11 @@ export class Task extends Schema.Class<Task>('Task')({
   createdAt: Schema.String,
   id: Schema.String,
   repositoryId: Schema.String,
+  sourceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  sourceUrl: Schema.optionalKey(Schema.NullOr(Schema.String)),
   status: Schema.Literal('queued'),
   title: Title,
+  workflow: Schema.optionalKey(Schema.NullOr(Schema.String)),
 }) {}
 
 export class Transition extends Schema.Class<Transition>('Transition')({
@@ -55,6 +64,31 @@ export class PipesError extends Schema.TaggedError<PipesError>()('PipesError', {
 }) {}
 
 export class PipesRpcs extends RpcGroup.make(
+  Rpc.make('githubIdentity', { error: PipesError, success: Schema.String }),
+  Rpc.make('githubInspect', {
+    error: PipesError,
+    payload: { path: Schema.NonEmptyString },
+    success: GitHubConnection,
+  }),
+  Rpc.make('githubClone', {
+    error: PipesError,
+    payload: { repository: GitHubRepository },
+    success: Schema.String,
+  }),
+  Rpc.make('githubAttach', {
+    error: PipesError,
+    payload: {
+      path: Schema.NonEmptyString,
+      repository: GitHubRepository,
+      workflow: Schema.NonEmptyString,
+    },
+    success: Repository,
+  }),
+  Rpc.make('githubIntake', {
+    error: PipesError,
+    payload: { repositoryId: Schema.NonEmptyString },
+    success: Schema.Int,
+  }),
   Rpc.make('codexProbe', { error: PipesError, payload: CodexProbe, success: CodexSettings }),
   Rpc.make('codexSetup', {
     error: PipesError,

@@ -1,6 +1,25 @@
 import { Schema } from 'effect';
 
 const Text = Schema.String.check(Schema.isPattern(/\S/));
+export const GitHubRepository = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/),
+);
+export const GitHubPolicy = Schema.Struct({
+  assigned_to_me: Schema.optionalKey(Schema.Boolean),
+  repository: GitHubRepository,
+  state: Schema.optionalKey(Schema.Literals(['open', 'closed', 'all'])),
+  workflow: Text,
+});
+
+export function githubRepository(value: string) {
+  return Schema.decodeSync(GitHubRepository)(
+    value
+      .trim()
+      .replace(/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)/i, '')
+      .replace(/\/$/, '')
+      .replace(/\.git$/, ''),
+  );
+}
 export const AgentCommand = Schema.Array(Schema.String).check(
   Schema.isMinLength(1),
   Schema.makeFilter((command) => /\S/.test(command[0] ?? '') || 'Expected an executable'),
@@ -32,13 +51,21 @@ export const Workflow = Schema.Struct({
 
 export const Config = Schema.Struct({
   base: Schema.optionalKey(Text),
+  github: Schema.optionalKey(GitHubPolicy),
   setup: Schema.optionalKey(AgentCommand),
   workflows: Schema.Record(Text, Workflow).check(
     Schema.makeFilter(
       (workflows) => Object.keys(workflows).length > 0 || 'Expected at least one workflow',
     ),
   ),
-});
+}).check(
+  Schema.makeFilter(
+    (config) =>
+      !config.github ||
+      Object.hasOwn(config.workflows, config.github.workflow) ||
+      'GitHub workflow must exist',
+  ),
+);
 
 export type Config = typeof Config.Type;
 
