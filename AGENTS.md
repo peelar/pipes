@@ -19,7 +19,7 @@ then how to run it. Label planned features clearly.
 
 ## Changesets
 
-PRs with user-facing changes include a changeset file (`.changeset/<name>.md`, `'pipes': patch|minor`). Merging the Version Packages PR bumps the version; ship binaries by pushing a matching tag, which triggers the release workflow.
+PRs with user-facing changes include a changeset file (`.changeset/<name>.md`, `'pipes': patch|minor`). CI enforces this; for release-neutral PRs run `changeset add --empty`. Merging the Version Packages PR bumps the version; ship binaries by pushing a matching tag, which triggers the release workflow.
 
 ## Effect development
 
