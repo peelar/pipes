@@ -169,7 +169,7 @@ export function App({
               focused={paneFocused(mode, pane, 'queue', modal)}
               onChange={(index) => setSelected(index)}
               options={snapshot.tasks.map((item) => ({
-                description: `${item.status} · ${snapshot.repositories.find((repo) => repo.id === item.repositoryId)?.name ?? ''}`,
+                description: `${item.status} · ${item.sourceId?.split(':', 1)[0] ?? 'manual'}`,
                 name: item.title,
               }))}
               selectedIndex={selected}

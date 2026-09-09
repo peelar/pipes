@@ -464,6 +464,8 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     await view.waitForFrame(
       (frame) => frame.includes('A real task') && frame.includes('Persist this brief.'),
     );
+    expect(view.captureCharFrame()).toContain('queued · manual');
+    expect(view.captureCharFrame()).not.toContain('queued · pipes');
     expect(view.captureCharFrame()).toContain('submitted');
     await act(async () => {
       view!.mockInput.pressKey('n');
