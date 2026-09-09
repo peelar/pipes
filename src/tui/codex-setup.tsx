@@ -288,7 +288,7 @@ function SetupShortcuts({ state, wizard }: { state: SetupState; wizard: boolean 
       (key) =>
         ({
           b: '[b] back',
-          i: '[i] install MCP & skill',
+          i: '[i] install mcp & skill',
           r: '[r] retry',
           return:
             state.status === 'workflow'
