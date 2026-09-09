@@ -28,6 +28,17 @@ export const CodexProbe = Schema.Struct({
 export const Title = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(240));
 export const Brief = Schema.String.check(Schema.isMaxLength(100_000));
 
+export const TaskSubmission = Schema.Struct({
+  brief: Brief,
+  repositoryId: Schema.NonEmptyString,
+  sourceId: Schema.optionalKey(Schema.NonEmptyString),
+  sourceUrl: Schema.optionalKey(Schema.NonEmptyString),
+  title: Title,
+  workflow: Schema.optionalKey(Schema.NonEmptyString),
+});
+
+export type TaskSubmission = typeof TaskSubmission.Type;
+
 export class Repository extends Schema.Class<Repository>('Repository')({
   id: Schema.String,
   name: Schema.String,

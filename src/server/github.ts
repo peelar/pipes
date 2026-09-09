@@ -68,6 +68,34 @@ export class GitHub extends Context.Service<
     webhook: (request: Request) => Promise<Response>;
   }
 >()('pipes/GitHub') {
+  // Delivery belongs to the source: a source layer may listen, poll, or do both.
+  static deliveryLayer = Layer.effectDiscard(
+    Effect.gen(function* () {
+      const github = yield* GitHub;
+      if (process.env.PIPES_GITHUB_WEBHOOK_SECRET) {
+        const port = Number(process.env.PIPES_GITHUB_PORT ?? '9419');
+        yield* Effect.acquireRelease(
+          Effect.try({
+            catch: () => new PipesError({ message: 'Cannot listen on GitHub webhook port.' }),
+            try: () =>
+              Bun.serve({
+                fetch: (request) =>
+                  new URL(request.url).pathname === '/github'
+                    ? github.webhook(request)
+                    : new Response('Not found', { status: 404 }),
+                hostname: '127.0.0.1',
+                maxRequestBodySize: 1024 * 1024,
+                port,
+              }),
+          }),
+          (server) => Effect.promise(() => server.stop(true)),
+        );
+        yield* Effect.logInfo(`GitHub webhook listening on 127.0.0.1:${port}/github`);
+      }
+      yield* github.startup.pipe(Effect.forkScoped);
+    }),
+  );
+
   static layer = Layer.effect(
     GitHub,
     Effect.gen(function* () {

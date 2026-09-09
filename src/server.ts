@@ -83,27 +83,7 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
     (server) => Effect.promise(() => server.stop(true)),
   );
   yield* Effect.logInfo(`Pipes listening on ${connection.url}`);
-  if (process.env.PIPES_GITHUB_WEBHOOK_SECRET) {
-    const port = Number(process.env.PIPES_GITHUB_PORT ?? '9419');
-    yield* Effect.acquireRelease(
-      Effect.try({
-        catch: () => new PipesError({ message: 'Cannot listen on GitHub webhook port.' }),
-        try: () =>
-          Bun.serve({
-            fetch: (request) =>
-              new URL(request.url).pathname === '/github'
-                ? github.webhook(request)
-                : new Response('Not found', { status: 404 }),
-            hostname: '127.0.0.1',
-            maxRequestBodySize: 1024 * 1024,
-            port,
-          }),
-      }),
-      (server) => Effect.promise(() => server.stop(true)),
-    );
-    yield* Effect.logInfo(`GitHub webhook listening on 127.0.0.1:${port}/github`);
-  }
-  yield* github.startup.pipe(Effect.forkScoped);
+  yield* Layer.build(GitHub.deliveryLayer.pipe(Layer.provide(Layer.succeedContext(services))));
   yield* Deferred.await(stopped);
   yield* Effect.sleep('100 millis');
 });

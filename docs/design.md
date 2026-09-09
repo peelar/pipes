@@ -147,7 +147,7 @@ Repositories are registered explicitly through TUI or CLI. Check configuration a
 
 For local registration, the TUI detects the repository containing its launch directory. If it is not registered, outside the first-time wizard, ask whether to connect it to Pipes, with explicit Yes/No choices in a centered modal over the main UI. The background remains visible but keyboard interaction stays in the modal. Declining continues without registration for that session; registered repositories are not prompted again. A keyboard directory picker supports browsing and typed paths with completion and home-directory expansion. Discovery does not register repositories automatically or scan the disk in the background.
 
-GitHub is a continuous source, alongside manual submission through Pipes interfaces. Source mechanisms are abstract: GitHub uses webhooks; other sources may poll. Users provide reachable webhook connectivity, such as an endpoint or tunnel. Pipes requires no Pipes-operated relay.
+GitHub is a continuous source, alongside manual submission through Pipes interfaces. Each source owns its delivery mechanism, eligibility rules, and mapping to a registered repository and workflow. Sources submit through the same durable task admission boundary, whether they poll or receive webhooks; task execution does not depend on delivery. GitHub currently uses webhooks for continuous delivery. Users provide reachable webhook connectivity, such as an endpoint or tunnel. Pipes requires no Pipes-operated relay.
 
 When execution is implemented, code configuration will also determine whether admitted tasks start automatically. Manual callers can select a workflow directly.
 

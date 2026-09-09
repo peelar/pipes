@@ -3,7 +3,7 @@ import { Context, DateTime, Effect, Layer, PubSub, Schema, Stream } from 'effect
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { SqlClient } from 'effect/unstable/sql';
 import { basename } from 'node:path';
-import { PipesError, Repository, Snapshot, Task } from '../protocol/pipes';
+import { PipesError, Repository, Snapshot, Task, TaskSubmission } from '../protocol/pipes';
 
 const databaseError = () =>
   new PipesError({ message: 'Database operation failed; see server.log.' });
@@ -13,14 +13,7 @@ export class Store extends Context.Service<
   {
     readonly register: (path: string) => Effect.Effect<Repository, PipesError>;
     readonly snapshot: Effect.Effect<Snapshot, PipesError>;
-    readonly submit: (input: {
-      brief: string;
-      repositoryId: string;
-      sourceId?: string;
-      sourceUrl?: string;
-      title: string;
-      workflow?: string;
-    }) => Effect.Effect<Task, PipesError>;
+    readonly submit: (input: TaskSubmission) => Effect.Effect<Task, PipesError>;
     readonly watch: Stream.Stream<Snapshot, PipesError>;
   }
 >()('pipes/Store') {
@@ -97,14 +90,10 @@ export class Store extends Context.Service<
           );
         });
 
-        const submit = Effect.fn('Store.submit')(function* (input: {
-          brief: string;
-          repositoryId: string;
-          sourceId?: string;
-          sourceUrl?: string;
-          title: string;
-          workflow?: string;
-        }) {
+        const submit = Effect.fn('Store.submit')(function* (submission: TaskSubmission) {
+          const input = yield* Schema.decodeEffect(TaskSubmission)(submission).pipe(
+            Effect.mapError((error) => new PipesError({ message: error.message })),
+          );
           const task = yield* Schema.decodeEffect(Task)({
             ...input,
             createdAt: DateTime.formatIso(yield* DateTime.now),
