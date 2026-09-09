@@ -101,6 +101,7 @@ test('execution uses the supplied environment and waits for its worker cleanup b
             title: 'Test',
           });
           const run = yield* execution.start({ taskId: task.id });
+          expect(run.id).toHaveLength(8);
           const waitForRun = (predicate: (run: Run) => boolean) =>
             store.watch.pipe(
               Stream.map((snapshot) => snapshot.runs?.find((current) => current.id === run.id)),

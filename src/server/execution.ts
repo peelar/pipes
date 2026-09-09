@@ -312,7 +312,7 @@ export class Execution extends Context.Service<
                 message: `Choose a configured workflow with --workflow: ${Object.keys(configuration.workflows).join(', ')}`,
               });
             }
-            const id = crypto.randomUUID();
+            const id = crypto.randomUUID().slice(0, 8);
             const run = new Run({
               attempts: [],
               baseRevision: yield* environment.git(repository.path, [
