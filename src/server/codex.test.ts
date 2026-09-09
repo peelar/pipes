@@ -32,11 +32,14 @@ test('Codex integration installation is detectable and never overwrites existing
   expect(
     await Effect.runPromise(codexMcpInstalled(home).pipe(Effect.provide(BunServices.layer))),
   ).toBe(true);
+  const mcpConfig = readFileSync(join(home, '.codex', 'config.toml'), 'utf8');
+  expect(mcpConfig).toContain('"mcp"');
   writeFileSync(filename, 'custom');
   expect(await Effect.runPromise(installCodex(home).pipe(Effect.provide(BunServices.layer)))).toBe(
     filename,
   );
   expect(readFileSync(filename, 'utf8')).toBe('custom');
+  expect(readFileSync(join(home, '.codex', 'config.toml'), 'utf8')).toBe(mcpConfig);
 });
 
 test('Codex probes negotiate settings, reject failures, clean up, and safely create a starter', async () => {
