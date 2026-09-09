@@ -64,6 +64,10 @@ export class PipesError extends Schema.TaggedError<PipesError>()('PipesError', {
 }) {}
 
 export class PipesRpcs extends RpcGroup.make(
+  Rpc.make('githubRepositories', {
+    error: PipesError,
+    success: Schema.Struct({ login: Schema.String, repositories: Schema.Array(GitHubRepository) }),
+  }),
   Rpc.make('githubIdentity', { error: PipesError, success: Schema.String }),
   Rpc.make('githubInspect', {
     error: PipesError,

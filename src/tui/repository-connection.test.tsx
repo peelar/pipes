@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { testRender } from '@opentui/react/test-utils';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { tmpdir } from 'node:os';
@@ -7,15 +7,18 @@ import { Client } from '../client/connection';
 import { PipesError, Repository } from '../protocol/pipes';
 import { RepositoryConnection } from './repository-connection';
 
-test('connection UI offers local remotes, retries identity, selects workflows, and accepts arbitrary GitHub URLs', async () => {
+test('connection UI offers local remotes, retries identity, selects workflows, and lists remote repositories', async () => {
   const repository = new Repository({ id: 'repo', name: 'repo', path: tmpdir() });
   const attached: Array<{ path: string; repository: string; workflow: string }> = [];
   const clones: Array<string> = [];
   let identityFails = true;
+  let listingFails = true;
+  const listing = Promise.withResolvers<void>();
   let connected = 0;
   let localOnly = 0;
   let closed = 0;
   const inspection = Promise.withResolvers<void>();
+  let identity = Promise.withResolvers<void>();
   const runtime = ManagedRuntime.make(
     Layer.effect(
       Client,
@@ -33,14 +36,26 @@ test('connection UI offers local remotes, retries identity, selects workflows, a
               return tmpdir();
             }),
           githubIdentity: () =>
-            identityFails
-              ? Effect.fail(new PipesError({ message: 'Sign in, then retry.' }))
-              : Effect.succeed('peelar'),
+            Effect.promise(() => identity.promise).pipe(
+              Effect.flatMap(() =>
+                identityFails
+                  ? Effect.fail(new PipesError({ message: 'Sign in, then retry.' }))
+                  : Effect.succeed('peelar'),
+              ),
+            ),
           githubInspect: () =>
             Effect.promise(async () => {
               await inspection.promise;
               return { remotes: ['peelar/pipes'], workflows: ['first', 'second'] };
             }),
+          githubRepositories: () =>
+            Effect.promise(() => listing.promise).pipe(
+              Effect.flatMap(() =>
+                listingFails
+                  ? Effect.fail(new PipesError({ message: 'Sign in to load repositories.' }))
+                  : Effect.succeed({ login: 'peelar', repositories: ['another/project'] }),
+              ),
+            ),
           register: () =>
             Effect.sync(() => {
               localOnly++;
@@ -94,11 +109,29 @@ test('connection UI offers local remotes, retries identity, selects workflows, a
     await view.waitForFrame((frame) => frame.includes('peelar/pipes'));
     expect(view.captureCharFrame()).toContain('Local only');
     await press('RETURN');
+    expect(view.captureCharFrame()).toContain('Connecting…');
+    expect(view.captureCharFrame()).not.toContain('Check GitHub connection');
+    expect(view.captureCharFrame()).not.toContain('Choose a workflow');
+    await act(async () => {
+      identity.resolve();
+      await Bun.sleep(50);
+    });
+    await view.flush();
     expect(view.captureCharFrame()).toContain('Sign in, then retry.');
+    expect(view.captureCharFrame()).toContain('Check GitHub connection');
     expect(attached).toHaveLength(0);
     identityFails = false;
+    identity = Promise.withResolvers<void>();
     await press('RETURN');
+    expect(view.captureCharFrame()).toContain('Connecting…');
+    expect(view.captureCharFrame()).not.toContain('Check GitHub connection');
+    await act(async () => {
+      identity.resolve();
+      await Bun.sleep(50);
+    });
+    await view.flush();
     expect(view.captureCharFrame()).toContain('Connected to GitHub as @peelar');
+    expect(view.captureCharFrame()).not.toContain('Check GitHub connection');
     expect(view.captureCharFrame()).toContain('open issues assigned to you');
     await press('ARROW_DOWN');
     await press('RETURN');
@@ -115,11 +148,40 @@ test('connection UI offers local remotes, retries identity, selects workflows, a
     expect(attached).toHaveLength(1);
     await destroy();
     view = await render();
-    await press('g');
-    expect(view.captureCharFrame()).toContain('Only connect repositories you trust');
+    await view.waitForFrame((frame) => frame.includes('[Local]'));
+    await press('TAB');
+    expect(view.captureCharFrame()).toContain('Loading GitHub repositories…');
+    expect(view.captureCharFrame()).not.toContain('another/project');
     await act(async () => {
-      await view.mockInput.typeText('https://github.com/another/project.git');
+      listing.resolve();
+      await Bun.sleep(50);
     });
+    await view.waitForFrame((frame) => frame.includes('Sign in to GitHub'));
+    const authentication = Promise.withResolvers<number>();
+    const spawn = spyOn(Bun, 'spawn').mockReturnValue({
+      exited: authentication.promise,
+    } as ReturnType<typeof Bun.spawn>);
+    try {
+      await press('RETURN');
+      expect(spawn).toHaveBeenCalledWith(
+        ['gh', 'auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web'],
+        { stderr: 'inherit', stdin: 'ignore', stdout: 'inherit' },
+      );
+      listingFails = false;
+      await act(async () => {
+        authentication.resolve(0);
+        await Bun.sleep(50);
+      });
+    } finally {
+      spawn.mockRestore();
+    }
+    await view.waitForFrame((frame) => frame.includes('another/project'));
+    expect(view.captureCharFrame()).toContain('[Remote]');
+    await press('TAB');
+    expect(view.captureCharFrame()).toContain('[Local]');
+    await press('TAB');
+    await view.waitForFrame((frame) => frame.includes('another/project'));
+    expect(view.captureCharFrame()).toContain('Only connect repositories you trust');
     await press('RETURN');
     expect(clones).toEqual(['another/project']);
     expect(view.captureCharFrame()).toContain('another/project');

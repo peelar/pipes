@@ -51,6 +51,14 @@ test('GitHub connection validates remotes, preserves config, imports, and reuses
   process.env.GIT_CONFIG_GLOBAL = join(directory, 'gitconfig');
   const fetchMock = (async (input: string | URL | Request) => {
     const url = new URL(typeof input === 'object' && 'url' in input ? input.url : input);
+    if (url.pathname === '/user/repos') {
+      expect(url.searchParams.get('affiliation')).toBe('owner,collaborator,organization_member');
+      return Response.json(
+        url.searchParams.get('page') === '1'
+          ? Array.from({ length: 100 }, (_, index) => ({ full_name: `owner/repo${index}` }))
+          : [{ full_name: 'team/shared' }],
+      );
+    }
     if (url.pathname === '/user') {
       return Response.json({ id: 7, login: 'me' });
     }
@@ -88,6 +96,10 @@ test('GitHub connection validates remotes, preserves config, imports, and reuses
     await git('-C', source, 'remote', 'add', 'other', 'https://gitlab.com/owner/repo.git');
     const github = await runtime.runPromise(GitHub);
     expect(await runtime.runPromise(github.identity)).toBe('me');
+    const accessible = await runtime.runPromise(github.repositories);
+    expect(accessible.login).toBe('me');
+    expect(accessible.repositories).toHaveLength(101);
+    expect(accessible.repositories[100]).toBe('team/shared');
     expect(await runtime.runPromise(github.inspect(source))).toEqual({
       policy: undefined,
       remotes: ['owner/repo'],

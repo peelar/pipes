@@ -211,7 +211,7 @@ export function RepositoryPicker({
       return;
     }
     if (editing) {
-      if (key.name === 'tab') {
+      if ((key.name === 'tab' && !onGitHub) || (key.ctrl && key.name === 'e')) {
         key.preventDefault();
         void completePath(path, directory)
           .then((result) => {
@@ -272,7 +272,7 @@ export function RepositoryPicker({
       flexShrink={0}
       height={12}
       padding={1}
-      title={`Connect${onGitHub ? ' · [g] GitHub' : ''} · [Enter] selects · [←] parent · [p] path · [Esc] cancels`}
+      title={`Connect · [Enter] selects · [←] parent · [p] path · [Esc] cancels`}
     >
       <text>{directory}</text>
       <text fg="#a6e3a1">
@@ -292,7 +292,7 @@ export function RepositoryPicker({
               setEditing(false);
             }
           }}
-          placeholder="Path (relative to displayed directory) · [Tab] completes · [Enter] opens"
+          placeholder="Path (relative to displayed directory) · [Ctrl+e] completes · [Enter] opens"
           value={path}
         />
       ) : ready ? (

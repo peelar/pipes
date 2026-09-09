@@ -2,9 +2,9 @@ import { useKeyboard } from '@opentui/react';
 import { Effect, type ManagedRuntime } from 'effect';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Client } from '../client/connection';
-import { githubRepository } from '../config';
 import { type GitHubConnection, type Repository } from '../protocol/pipes';
 import { CodexSetup } from './codex-setup';
+import { RemoteRepositories } from './remote-repositories';
 import { RepositoryPicker } from './repository-picker';
 
 export function RepositoryConnection({
@@ -22,9 +22,9 @@ export function RepositoryConnection({
   runtime: ManagedRuntime.ManagedRuntime<Client, never>;
   startDirectory: string;
 }) {
-  const [phase, setPhase] = useState<'browse' | 'remote' | 'offer' | 'workflow' | 'setup'>(
-    'browse',
-  );
+  const [phase, setPhase] = useState<
+    'browse' | 'remote' | 'offer' | 'checking' | 'workflow' | 'setup'
+  >('browse');
   const [path, setPath] = useState(initialPath ?? '');
   const [remote, setRemote] = useState('');
   const [info, setInfo] = useState<typeof GitHubConnection.Type>();
@@ -44,7 +44,10 @@ export function RepositoryConnection({
     void runtime
       .runPromise(operation)
       .then(done)
-      .catch((error: unknown) => setError(String(error)))
+      .catch((error: unknown) => {
+        setError(String(error));
+        setPhase((current) => (current === 'checking' ? 'workflow' : current));
+      })
       .finally(() => {
         pending.current = false;
         setBusy(false);
@@ -90,17 +93,24 @@ export function RepositoryConnection({
   }, [initialPath]);
 
   useKeyboard((key) => {
+    if (!pending.current && key.name === 'tab' && ['browse', 'remote'].includes(phase)) {
+      key.preventDefault();
+      setPhase(phase === 'browse' ? 'remote' : 'browse');
+    }
     if (phase !== 'setup' && !pending.current && key.name === 'escape') {
       onClose();
     }
   });
 
   function choose(target: string) {
+    setPhase('checking');
     setRemote(target);
-    setPhase('workflow');
     run(
       Effect.flatMap(Client, (client) => client.githubIdentity()),
-      setAccount,
+      (login) => {
+        setAccount(login);
+        setPhase('workflow');
+      },
     );
   }
 
@@ -124,7 +134,8 @@ export function RepositoryConnection({
       padding={1}
       title="Connect repository"
     >
-      {busy ? (
+      <ConnectionTabs phase={phase} />
+      {busy || phase === 'checking' ? (
         <text fg="#f9e2af">Connecting…</text>
       ) : phase === 'browse' ? (
         <RepositoryPicker
@@ -135,40 +146,26 @@ export function RepositoryConnection({
           startDirectory={startDirectory}
         />
       ) : phase === 'remote' ? (
-        <>
-          <text>Connect any GitHub repository</text>
-          <text>
-            Clone into Pipes’ managed directory. Only connect repositories you trust: configuration
-            is executable TypeScript.
-          </text>
-          <input
-            focused={!busy}
-            onSubmit={(value) => {
-              try {
-                const target = githubRepository(String(value));
-                setRemote(target);
-                run(
-                  Effect.gen(function* () {
-                    const client = yield* Client;
-                    const login = yield* client.githubIdentity();
-                    const cloned = yield* client.githubClone({ repository: target });
-                    const details = yield* client.githubInspect({ path: cloned });
-                    return { cloned, details, login };
-                  }),
-                  ({ cloned, details, login }) => {
-                    setPath(cloned);
-                    setInfo(details);
-                    setAccount(login);
-                    setPhase('workflow');
-                  },
-                );
-              } catch {
-                setError('Enter a GitHub owner/repo, HTTPS URL, or SSH URL.');
-              }
-            }}
-            placeholder="owner/repo or GitHub URL · [Enter] trust and clone"
-          />
-        </>
+        <RemoteRepositories
+          onSelect={(target, login) => {
+            setRemote(target);
+            setAccount(login);
+            run(
+              Effect.gen(function* () {
+                const client = yield* Client;
+                const cloned = yield* client.githubClone({ repository: target });
+                const details = yield* client.githubInspect({ path: cloned });
+                return { cloned, details };
+              }),
+              ({ cloned, details }) => {
+                setPath(cloned);
+                setInfo(details);
+                setPhase('workflow');
+              },
+            );
+          }}
+          runtime={runtime}
+        />
       ) : phase === 'offer' ? (
         <>
           <text>{path}</text>
@@ -272,4 +269,12 @@ function policySummary(info: typeof GitHubConnection.Type | undefined) {
   return info?.policy
     ? `Existing code policy: ${info.policy.state ?? 'open'} issues · ${info.policy.assigned_to_me === false ? 'any assignee' : 'assigned to you'}`
     : 'Default: open issues assigned to you. Policy stays in code.';
+}
+
+function ConnectionTabs({ phase }: { phase: string }) {
+  return phase === 'browse' || phase === 'remote' ? (
+    <text fg="#82aaff">
+      {phase === 'browse' ? '[Local]   Remote' : 'Local   [Remote]'} · [Tab] switch
+    </text>
+  ) : null;
 }

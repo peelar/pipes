@@ -170,6 +170,12 @@ test('unsupported Bun fails with upgrade instructions before server startup', ()
 
 test('CLI, live terminal queue, validation, and server restart share durable state', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pipes-test-'));
+  const seed = join(directory, 'pipes');
+  mkdirSync(join(seed, '.pipes'), { recursive: true });
+  writeFileSync(join(seed, '.pipes/pipes.ts'), readFileSync('.pipes/pipes.ts'));
+  expect(
+    await Bun.spawn(['git', 'init', seed], { stderr: 'ignore', stdout: 'ignore' }).exited,
+  ).toBe(0);
   const projects = join(directory, 'projects');
   const first = join(projects, 'a project');
   const second = join(projects, 'b project');
@@ -227,10 +233,10 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     const missingAgentDirectory = await cli('agent', join(directory, 'missing'));
     expect(missingAgentDirectory.code).not.toBe(0);
     expect(missingAgentDirectory.stdout + missingAgentDirectory.stderr).toContain('Cannot launch');
-    const registered = await cli('register', process.cwd());
+    const registered = await cli('register', seed);
     expect(registered.code).toBe(0);
     const repository = Schema.decodeUnknownSync(Repository)(JSON.parse(registered.stdout));
-    const again = await cli('register', process.cwd());
+    const again = await cli('register', seed);
     expect(JSON.parse(again.stdout).id).toBe(repository.id);
     expect((await cli('register', directory)).code).not.toBe(0);
     expect((await cli('submit', '   ', '--repo', repository.id)).code).not.toBe(0);
@@ -370,14 +376,11 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
       view!.mockInput.pressKey('c');
       await Bun.sleep(100);
     });
-    expect(view.captureCharFrame()).toContain('Reading directory…');
-    expect(view.captureCharFrame()).not.toContain(`Connected: ${repository.name}`);
-    expect(view.captureCharFrame()).not.toContain('Connect this repository');
     await act(async () => {
       await Bun.sleep(100);
     });
     await view.waitForFrame((frame) => frame.includes('Git repository:'));
-    expect(view.captureCharFrame()).toContain(`Connected: ${repository.name}`);
+    expect(view.captureCharFrame()).toContain('Connect this repository');
     await act(async () => {
       view!.mockInput.pressKey('ARROW_LEFT');
       await Bun.sleep(100);
@@ -416,7 +419,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
       await view!.mockInput.typeText('b');
     });
     await act(async () => {
-      view!.mockInput.pressKey('TAB');
+      view!.mockInput.pressKey('e', { ctrl: true });
       await Bun.sleep(100);
     });
     await view.waitForFrame((frame) => frame.includes('projects/b project/'));

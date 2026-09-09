@@ -29,6 +29,7 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
         githubIdentity: () => github.identity,
         githubInspect: ({ path }) => github.inspect(path),
         githubIntake: ({ repositoryId }) => github.intake(repositoryId),
+        githubRepositories: () => github.repositories,
         register: ({ path }) =>
           store
             .register(path)

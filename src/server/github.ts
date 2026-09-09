@@ -63,6 +63,7 @@ export class GitHub extends Context.Service<
     identity: Effect.Effect<string, PipesError>;
     inspect: (path: string) => Effect.Effect<typeof GitHubConnection.Type, PipesError>;
     intake: (repositoryId: string) => Effect.Effect<number, PipesError>;
+    repositories: Effect.Effect<{ login: string; repositories: Array<string> }, PipesError>;
     startup: Effect.Effect<void>;
     webhook: (request: Request) => Promise<Response>;
   }
@@ -80,7 +81,11 @@ export class GitHub extends Context.Service<
           return token;
         }
         return yield* spawner
-          .string(ChildProcess.make('gh', ['auth', 'token'], { stderr: 'ignore' }))
+          .string(
+            ChildProcess.make('gh', ['auth', 'token', '--hostname', 'github.com'], {
+              stderr: 'ignore',
+            }),
+          )
           .pipe(
             Effect.map((value) => value.trim()),
             Effect.timeout('5 seconds'),
@@ -338,6 +343,25 @@ export class GitHub extends Context.Service<
           };
         }, Effect.mapError(failure)),
         intake,
+        repositories: Effect.gen(function* () {
+          const user = yield* identity;
+          const repositories: Array<string> = [];
+          for (let page = 1; ; page++) {
+            const entries = yield* get(
+              `/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&sort=full_name&per_page=100&page=${page}`,
+            ).pipe(
+              Effect.flatMap(
+                Schema.decodeUnknownEffect(
+                  Schema.Array(Schema.Struct({ full_name: GitHubRepository })),
+                ),
+              ),
+            );
+            repositories.push(...entries.map((entry) => entry.full_name));
+            if (entries.length < 100) {
+              return { login: user.login, repositories };
+            }
+          }
+        }).pipe(Effect.mapError(failure)),
         startup: Effect.gen(function* () {
           for (const repository of (yield* store.snapshot).repositories) {
             yield* intake(repository.id).pipe(
