@@ -133,6 +133,8 @@ Lease expiration signals uncertainty, not proof that a worker stopped. Confirm t
 
 ## Sources and onboarding
 
+The first TUI launch shows an animated Pipes logo before repository onboarding. Later launches skip it.
+
 Onboarding starts with configuring agents and connecting GitHub. Discover supported installed providers, let the user select advertised settings, and verify the connection. Pipes provides instructions for missing installation or authentication; it does not manage those tools itself.
 
 Repositories are registered explicitly through TUI or CLI. Check configuration and offer the starter workflow when missing. GitHub supplies work for registered repositories.

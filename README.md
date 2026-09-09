@@ -1,5 +1,15 @@
 # Pipes
 
+```text
+╭───────╮  ╭───────╮  ╭───────╮  ╭───────╮  ╭───────╮
+│ ╭───╮ │  ╰──╮ ╭──╯  │ ╭───╮ │  │ ╭─────╯  │ ╭─────╯
+│ │   │ │     │ │     │ │   │ │  │ ╰────╮   │ ╰─────╮
+│ ╰───╯ │     │ │     │ ╰───╯ │  │ ╭────╯   ╰─────╮ │
+│ ╭─────╯     │ │     │ ╭─────╯  │ │              │ │
+│ │        ╭──╯ ╰──╮  │ │        │ ╰─────╮  ╭─────╯ │
+╰─╯        ╰───────╯  ╰─╯        ╰───────╯  ╰───────╯
+```
+
 A persistent local task queue with a terminal UI. This first slice registers Git
 repositories, captures tasks and their briefs, and keeps a chronological submission
 history in SQLite. Agent execution and GitHub intake are not connected yet.
@@ -13,7 +23,11 @@ bun install
 bun run dev
 ```
 
-On launch inside an unregistered Git repository, Pipes immediately asks whether
+The first TUI launch reveals the Pipes logo, then opens the queue. Press any key
+to skip the animation. Later launches skip it automatically; the marker lives in
+the Pipes data directory.
+
+On launch inside an unregistered Git repository, Pipes asks whether
 to initialize it: Enter or `y` confirms; `n` or Esc skips for this session.
 Initialization currently registers the repository without changing its files.
 In the TUI, `r` opens a

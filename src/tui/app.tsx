@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Client, type Connection } from '../client/connection';
 import { Snapshot } from '../protocol/pipes';
 import { InitializeRepository, RepositoryPicker, useSuggestedRoot } from './repository-picker';
+import { claimWelcome, Welcome } from './welcome';
 
 type Runtime = ReturnType<typeof makeRuntime>;
 const makeRuntime = (connection: Connection) => ManagedRuntime.make(Client.layer(connection));
@@ -253,7 +254,11 @@ export async function launch(connection: Connection) {
   const renderer = await createCliRenderer({ exitOnCtrlC: true, onDestroy: () => finish() });
   const root = createRoot(renderer);
   try {
-    root.render(<App onQuit={() => renderer.destroy()} runtime={runtime} />);
+    root.render(
+      <Welcome firstLaunch={claimWelcome(connection.directory)}>
+        <App onQuit={() => renderer.destroy()} runtime={runtime} />
+      </Welcome>,
+    );
     await closed;
   } finally {
     root.unmount();

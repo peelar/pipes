@@ -9,6 +9,73 @@ import { Client, requireSupportedBun } from '../client/connection';
 import { Repository, Snapshot } from '../protocol/pipes';
 import { App } from './app';
 import { completePath, expandPath, gitRoot } from './repository-picker';
+import { claimWelcome, logo, Welcome } from './welcome';
+
+test('first launch animates the README logo once, continues automatically, and supports skipping', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pipes-welcome-'));
+  expect(readFileSync('README.md', 'utf8')).toContain(logo);
+  const firstLaunch = claimWelcome(directory);
+  expect(firstLaunch).toBe(true);
+  expect(claimWelcome(directory)).toBe(false);
+  const view = await testRender(
+    <Welcome firstLaunch={firstLaunch}>
+      <text>Queue ready</text>
+    </Welcome>,
+    { height: 24, width: 80 },
+  );
+  try {
+    await view.waitForFrame((frame) => frame.includes('Press any key'));
+    expect(view.captureCharFrame()).not.toContain('Queue ready');
+    await act(async () => {
+      await Bun.sleep(160);
+    });
+    expect(view.captureCharFrame()).toContain('╭────');
+    expect(view.captureCharFrame()).not.toContain(logo.split('\n')[0]!);
+    await act(async () => {
+      await Bun.sleep(1000);
+    });
+    expect(view.captureCharFrame()).toContain(logo.split('\n')[0]!);
+    await act(async () => {
+      await Bun.sleep(700);
+    });
+    await view.waitForFrame((frame) => frame.includes('Queue ready'));
+  } finally {
+    await act(async () => {
+      view.renderer.destroy();
+    });
+  }
+  const skipped = await testRender(
+    <Welcome firstLaunch>
+      <text>Queue ready</text>
+    </Welcome>,
+    { height: 24, width: 80 },
+  );
+  try {
+    await skipped.waitForFrame((frame) => frame.includes('Press any key'));
+    await act(async () => {
+      skipped.mockInput.pressKey('RETURN');
+    });
+    await skipped.waitForFrame((frame) => frame.includes('Queue ready'));
+  } finally {
+    await act(async () => {
+      skipped.renderer.destroy();
+    });
+  }
+  const reopened = await testRender(
+    <Welcome firstLaunch={claimWelcome(directory)}>
+      <text>Queue ready</text>
+    </Welcome>,
+    { height: 24, width: 80 },
+  );
+  try {
+    await reopened.waitForFrame((frame) => frame.includes('Queue ready'));
+    expect(reopened.captureCharFrame()).not.toContain('Press any key');
+  } finally {
+    await act(async () => {
+      reopened.renderer.destroy();
+    });
+  }
+});
 
 test('unsupported Bun fails with upgrade instructions before server startup', () => {
   expect(() => requireSupportedBun('1.0.26')).toThrow('Run bun upgrade');
