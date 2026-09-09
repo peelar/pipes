@@ -170,10 +170,12 @@ export async function completePath(value: string, base: string) {
 export function RepositoryPicker({
   busy,
   onRegister,
+  repositories = [],
   startDirectory,
 }: {
   busy: boolean;
   onRegister: (path: string) => void;
+  repositories?: ReadonlyArray<{ name: string; path: string }>;
   startDirectory: string;
 }) {
   const [directory, setDirectory] = useState(startDirectory);
@@ -225,17 +227,38 @@ export function RepositoryPicker({
   });
 
   const options = [
-    ...(ready && listing.root
-      ? [{ description: listing.root, name: 'Connect this repository', value: listing.root }]
+    ...(ready &&
+    listing.root &&
+    !repositories.some((repository) => repository.path === listing.root)
+      ? [
+          {
+            action: 'register' as const,
+            description: listing.root,
+            name: 'Connect this repository',
+            value: listing.root,
+          },
+        ]
       : []),
-    { description: 'Parent directory', name: '..', value: dirname(directory) },
+    {
+      action: 'browse' as const,
+      description: 'Parent directory',
+      name: '..',
+      value: dirname(directory),
+    },
     ...(ready
       ? listing.folders.map((name) => ({
+          action: 'browse' as const,
           description: '',
           name: `${name}/`,
           value: resolve(directory, name),
         }))
       : []),
+    ...repositories.map((repository) => ({
+      action: 'browse' as const,
+      description: repository.path,
+      name: `Connected: ${repository.name}`,
+      value: repository.path,
+    })),
   ];
 
   return (
@@ -278,7 +301,7 @@ export function RepositoryPicker({
             if (!option || busy) {
               return;
             }
-            if (ready && listing.root && index === 0) {
+            if (option.action === 'register') {
               onRegister(option.value);
             } else {
               setDirectory(option.value);

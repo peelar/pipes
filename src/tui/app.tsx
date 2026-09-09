@@ -218,6 +218,7 @@ export function App({
         <RepositoryPicker
           busy={busy}
           onRegister={(path) => save(Effect.flatMap(Client, (client) => client.register({ path })))}
+          repositories={snapshot.repositories}
           startDirectory={startDirectory}
         />
       )}

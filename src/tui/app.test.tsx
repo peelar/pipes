@@ -370,6 +370,8 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
       view!.mockInput.pressKey('c');
       await Bun.sleep(100);
     });
+    expect(view.captureCharFrame()).toContain(`Connected: ${repository.name}`);
+    expect(view.captureCharFrame()).not.toContain('Connect this repository');
     await act(async () => {
       await Bun.sleep(100);
     });
