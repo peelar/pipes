@@ -1,0 +1,44 @@
+{
+  "name": "pipes",
+  "version": "0.0.1",
+  "private": true,
+  "bin": {
+    "pipes": "src/cli.ts",
+    "pipesd": "src/server.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "db:reset": "bun scripts/reset-db.ts",
+    "dev": "bun src/cli.ts",
+    "pipes": "bun src/cli.ts",
+    "pipesd": "bun src/server.ts",
+    "test": "bun test",
+    "check": "vp check && tsc --noEmit && bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "vp lint",
+    "fmt": "vp fmt",
+    "postinstall": "effect-tsgo patch"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.0-rc.112",
+    "@effect/sql-sqlite-bun": "4.0.0-rc.112",
+    "@opentui/core": "0.5.11",
+    "@opentui/react": "0.5.11",
+    "effect": "4.0.0-rc.112",
+    "react": "19.2.4"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.43.0",
+    "@nkzw/oxlint-config": "2.0.1",
+    "@types/bun": "latest",
+    "@types/react": "latest",
+    "oxlint": "1.81.0",
+    "typescript": "7.0.2",
+    "vite-plus": "0.3.1"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=22.18.0"
+  },
+  "packageManager": "bun@1.4.2"
+}
