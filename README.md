@@ -10,7 +10,7 @@
 ╰─╯        ╰───────╯  ╰─╯        ╰───────╯  ╰───────╯
 ```
 
-A local tool for managing coding tasks and agent workflows across your Git repositories.
+A personal software factory for organizing incoming work and getting it done through agentic pipelines defined in code.
 
 ## Features
 
