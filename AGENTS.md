@@ -17,6 +17,10 @@ Keep it in simple, concise English: graphic and project name, one-sentence
 description, core characteristics and features (which may be forward-looking),
 then how to run it. Label planned features clearly.
 
+## Changesets
+
+PRs with user-facing changes include a changeset file (`.changeset/<name>.md`, `'pipes': patch|minor`). Merging the Version Packages PR bumps the version; ship binaries by pushing a matching tag, which triggers the release workflow.
+
 ## Effect development
 
 Before writing Effect code, read `node_modules/effect/AGENTS.md` completely

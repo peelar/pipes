@@ -1,0 +1,24 @@
+name: changesets
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Version Packages PR
+        uses: changesets/action@v1
+        with:
+          version: bun run version-packages
+          # No npm publish: pipes ships binaries via tags (see release.yml).
+          publish: echo "Binaries ship by pushing a tag, not through changesets."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

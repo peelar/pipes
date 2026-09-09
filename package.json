@@ -14,6 +14,8 @@
     "reset": "bun scripts/reset.ts",
     "dev": "bun --watch src/dev.ts",
     "build": "bun scripts/build.ts",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
     "pipes": "bun src/cli.ts",
     "pipesd": "bun src/server.ts",
     "test": "bun test",
