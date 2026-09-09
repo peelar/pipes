@@ -3,9 +3,11 @@ import { createRoot, useKeyboard } from '@opentui/react';
 import { Effect, ManagedRuntime, Stream } from 'effect';
 import { useEffect, useRef, useState } from 'react';
 import { Client, type Connection } from '../client/connection';
-import { Snapshot } from '../protocol/pipes';
-import { InitializeRepository, RepositoryPicker, useSuggestedRoot } from './repository-picker';
+import { Snapshot, type Repository } from '../protocol/pipes';
+import { ConnectRepository, RepositoryPicker, useSuggestedRoot } from './repository-picker';
 import { claimWelcome, Welcome } from './welcome';
+import { Onboarding, readOnboarding } from './onboarding';
+import { CodexSetup } from './codex-setup';
 
 type Runtime = ReturnType<typeof makeRuntime>;
 const makeRuntime = (connection: Connection) => ManagedRuntime.make(Client.layer(connection));
@@ -15,11 +17,19 @@ function paneFocused(mode: string, pane: string, target: string, modal: string |
   return mode === 'queue' && pane === target && !modal;
 }
 
+function shortcuts(busy: boolean, repository: Repository | undefined) {
+  return busy
+    ? 'Saving…'
+    : `[↑↓] scroll  [←→] pane  [n] new  [c] connect  [a] agent  [Tab] repo (${repository?.name ?? 'none'})  [q] detach`;
+}
+
 export function App({
+  onboardingDirectory,
   onQuit,
   runtime,
   startDirectory = process.cwd(),
 }: {
+  onboardingDirectory?: string;
   onQuit: () => void;
   runtime: Runtime;
   startDirectory?: string;
@@ -31,8 +41,15 @@ export function App({
   const [mode, setMode] = useState<'queue' | 'register' | 'title' | 'brief'>('queue');
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [agentSetup, setAgentSetup] = useState<string>();
+  const [onboarding, setOnboarding] = useState(() =>
+    onboardingDirectory && !readOnboarding(onboardingDirectory).complete
+      ? onboardingDirectory
+      : undefined,
+  );
   const brief = useRef<TextareaRenderable>(null);
   const task = snapshot.tasks[selected];
   const repository = snapshot.repositories[repositoryIndex];
@@ -40,8 +57,9 @@ export function App({
     startDirectory,
     snapshot.repositories,
     connected,
-    mode === 'queue',
+    mode === 'queue' && !agentSetup && !onboarding,
   );
+  const modal = [onboarding, agentSetup, suggestedRoot].find(Boolean);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -69,6 +87,14 @@ export function App({
     return () => controller.abort();
   }, [runtime]);
 
+  useEffect(() => {
+    if (!success) {
+      return;
+    }
+    const timeout = setTimeout(() => setSuccess(''), 5000);
+    return () => clearTimeout(timeout);
+  }, [success]);
+
   const save = (operation: Effect.Effect<unknown, unknown, Client>) => {
     setBusy(true);
     setError('');
@@ -89,7 +115,7 @@ export function App({
   };
 
   useKeyboard((key) => {
-    if (suggestedRoot) {
+    if (modal) {
       return;
     }
     if (key.name === 'escape' && !busy) {
@@ -99,8 +125,10 @@ export function App({
     if (mode === 'queue') {
       if (key.name === 'q') {
         onQuit();
-      } else if (key.name === 'r') {
+      } else if (key.name === 'c') {
         setMode('register');
+      } else if (key.name === 'a') {
+        setAgentSetup(repository?.path ?? startDirectory);
       } else if (key.name === 'n' && repository) {
         setTitle('');
         setMode('title');
@@ -136,7 +164,7 @@ export function App({
           {snapshot.tasks.length ? (
             <select
               flexGrow={1}
-              focused={paneFocused(mode, pane, 'queue', suggestedRoot)}
+              focused={paneFocused(mode, pane, 'queue', modal)}
               onChange={(index) => setSelected(index)}
               options={snapshot.tasks.map((item) => ({
                 description: `${item.status} · ${snapshot.repositories.find((repo) => repo.id === item.repositoryId)?.name ?? ''}`,
@@ -149,18 +177,14 @@ export function App({
             <text>
               No tasks yet.{'\n\n'}
               {repository
-                ? 'Press n to submit your first task.'
-                : 'Press r to register a Git repository.'}
+                ? 'Press [n] to submit your first task.'
+                : 'Press [c] to connect a Git repository.'}
             </text>
           )}
         </box>
         <box border flexDirection="column" flexGrow={1} padding={1} title="Task">
           {task ? (
-            <scrollbox
-              flexGrow={1}
-              focused={paneFocused(mode, pane, 'task', suggestedRoot)}
-              key={task.id}
-            >
+            <scrollbox flexGrow={1} focused={paneFocused(mode, pane, 'task', modal)} key={task.id}>
               <text fg="#82aaff">
                 <b>{task.title}</b>
               </text>
@@ -201,7 +225,7 @@ export function App({
         <box
           border
           padding={1}
-          title={`New task in ${repository?.name} · Enter continues · Esc cancels`}
+          title={`New task in ${repository?.name} · [Enter] continues · [Esc] cancels`}
         >
           <input
             flexGrow={1}
@@ -218,7 +242,12 @@ export function App({
         </box>
       )}
       {mode === 'brief' && (
-        <box border height={8} padding={1} title="Markdown brief · Ctrl+S submits · Esc cancels">
+        <box
+          border
+          height={8}
+          padding={1}
+          title="Markdown brief · [Ctrl+S] submits · [Esc] cancels"
+        >
           <textarea
             flexGrow={1}
             focused={!busy}
@@ -227,14 +256,11 @@ export function App({
           />
         </box>
       )}
+      {success && <text fg="#a6e3a1">✓ Setup complete · {success}</text>}
       {error && <text fg="#f38ba8">{error}</text>}
-      <text fg="#a6adc8">
-        {busy
-          ? 'Saving…'
-          : `↑↓ scroll  ←→ pane  n new  r register  Tab repo [${repository?.name ?? 'none'}]  q detach`}
-      </text>
+      <text fg="#a6adc8">{shortcuts(busy, repository)}</text>
       {suggestedRoot && (
-        <InitializeRepository
+        <ConnectRepository
           busy={busy}
           error={error}
           onConfirm={() =>
@@ -243,6 +269,29 @@ export function App({
           onDecline={dismissSuggestion}
           path={suggestedRoot}
         />
+      )}
+      {onboarding && (
+        <Onboarding
+          directory={onboarding}
+          onClose={(path, summary) => {
+            if (summary) {
+              setSuccess(summary);
+            }
+            setRepositoryIndex(
+              Math.max(
+                0,
+                snapshot.repositories.findIndex((repository) => repository.path === path),
+              ),
+            );
+            dismissSuggestion();
+            setOnboarding(undefined);
+          }}
+          runtime={runtime}
+          startDirectory={startDirectory}
+        />
+      )}
+      {agentSetup && (
+        <CodexSetup onClose={() => setAgentSetup(undefined)} path={agentSetup} runtime={runtime} />
       )}
     </box>
   );
@@ -253,10 +302,15 @@ export async function launch(connection: Connection) {
   const { promise: closed, resolve: finish } = Promise.withResolvers<void>();
   const renderer = await createCliRenderer({ exitOnCtrlC: true, onDestroy: () => finish() });
   const root = createRoot(renderer);
+  const firstLaunch = claimWelcome(connection.directory);
   try {
     root.render(
-      <Welcome firstLaunch={claimWelcome(connection.directory)}>
-        <App onQuit={() => renderer.destroy()} runtime={runtime} />
+      <Welcome firstLaunch={firstLaunch}>
+        <App
+          onboardingDirectory={connection.directory}
+          onQuit={() => renderer.destroy()}
+          runtime={runtime}
+        />
       </Welcome>,
     );
     await closed;

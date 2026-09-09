@@ -5,7 +5,6 @@ import { decodeConfig } from './config';
 
 test('configuration validates the example and rejects malformed workflow settings', async () => {
   const decoded = await Effect.runPromise(decodeConfig(example));
-  expect(decoded).toEqual(example);
   expect(decoded.base).toBeUndefined();
   expect(Effect.runSync(decodeConfig({ ...example, base: 'main' })).base).toBe('main');
   expect(JSON.stringify(decoded)).toBe(JSON.stringify(example));

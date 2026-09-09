@@ -34,7 +34,7 @@ export function useSuggestedRoot(
   return [suggested, () => setDismissed(true)] as const;
 }
 
-export function InitializeRepository({
+export function ConnectRepository({
   busy,
   error,
   onConfirm,
@@ -76,12 +76,12 @@ export function InitializeRepository({
         gap={1}
         maxWidth={80}
         padding={1}
-        title="Initialize repository"
+        title="Connect repository"
         width="90%"
       >
-        <text fg="#82aaff">Do you want to initialize this repository in Pipes?</text>
+        <text fg="#82aaff">Do you want to connect this repository in Pipes?</text>
         <text>{path}</text>
-        <text>This registers the repository locally. No repository files are changed.</text>
+        <text>This connects the repository locally. No repository files are changed.</text>
         <select
           focused={!busy}
           height={4}
@@ -95,12 +95,12 @@ export function InitializeRepository({
             }
           }}
           options={[
-            { description: 'Register this repository in Pipes', name: 'Yes, initialize' },
-            { description: 'Continue without registering', name: 'No, not now' },
+            { description: 'Connect this repository in Pipes', name: 'Yes, connect' },
+            { description: 'Continue without connecting', name: 'No, not now' },
           ]}
         />
         <text>
-          {busy ? 'Initializing…' : '↑↓ choose · Enter confirm · y yes · n / Esc not now'}
+          {busy ? 'Connecting…' : '[↑↓] choose · [Enter] confirm · [y] yes · [n] / [Esc] not now'}
         </text>
         {error && <text fg="#f38ba8">{error}</text>}
       </box>
@@ -128,21 +128,23 @@ export function expandPath(path: string, base: string) {
 
 export async function directories(path: string) {
   const entries = await readdir(path, { withFileTypes: true });
-  const folders = await Promise.all(
-    entries
-      .filter((entry) => entry.name !== '.git')
-      .map(async (entry) => {
-        const isDirectory =
-          entry.isDirectory() ||
-          (entry.isSymbolicLink() &&
-            (await stat(resolve(path, entry.name)).then(
-              (info) => info.isDirectory(),
-              () => false,
-            )));
-        return isDirectory ? entry.name : undefined;
-      }),
-  );
-  return folders.filter((name) => name !== undefined).sort((a, b) => a.localeCompare(b));
+  const folders: Array<string> = [];
+  for (const entry of entries) {
+    if (entry.name === '.git') {
+      continue;
+    }
+    if (
+      entry.isDirectory() ||
+      (entry.isSymbolicLink() &&
+        (await stat(resolve(path, entry.name)).then(
+          (info) => info.isDirectory(),
+          () => false,
+        )))
+    ) {
+      folders.push(entry.name);
+    }
+  }
+  return folders.sort((a, b) => a.localeCompare(b));
 }
 
 export async function completePath(value: string, base: string) {
@@ -224,7 +226,7 @@ export function RepositoryPicker({
 
   const options = [
     ...(ready && listing.root
-      ? [{ description: listing.root, name: 'Register this repository', value: listing.root }]
+      ? [{ description: listing.root, name: 'Connect this repository', value: listing.root }]
       : []),
     { description: 'Parent directory', name: '..', value: dirname(directory) },
     ...(ready
@@ -243,7 +245,7 @@ export function RepositoryPicker({
       flexShrink={0}
       height={12}
       padding={1}
-      title="Register repository · Enter selects · ← parent · p path · Esc cancels"
+      title="Connect repository · [Enter] selects · [←] parent · [p] path · [Esc] cancels"
     >
       <text>{directory}</text>
       <text fg="#a6e3a1">
@@ -263,7 +265,7 @@ export function RepositoryPicker({
               setEditing(false);
             }
           }}
-          placeholder="Path (relative to displayed directory) · Tab completes · Enter opens"
+          placeholder="Path (relative to displayed directory) · [Tab] completes · [Enter] opens"
           value={path}
         />
       ) : (

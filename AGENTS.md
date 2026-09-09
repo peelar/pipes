@@ -10,6 +10,13 @@ Read `docs/design.md` before changing product behavior or architecture.
 
 The design document sets boundaries. It is not a task list or roadmap; the user steers the work.
 
+## README
+
+Do not use `README.md` as a notepad for project updates or implementation notes.
+Keep it in simple, concise English: graphic and project name, one-sentence
+description, core characteristics and features (which may be forward-looking),
+then how to run it. Label planned features clearly.
+
 ## Effect development
 
 Before writing Effect code, read `node_modules/effect/AGENTS.md` completely

@@ -1,5 +1,23 @@
 import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
+import { Agent, AgentCommand } from '../config';
+
+const AgentChoice = Schema.Struct({ name: Schema.String, value: Schema.NonEmptyString });
+export class CodexSettings extends Schema.Class<CodexSettings>('CodexSettings')({
+  adapter: Schema.String,
+  configurationExists: Schema.Boolean,
+  model: Schema.NonEmptyString,
+  models: Schema.Array(AgentChoice),
+  reasoning: Schema.NonEmptyString,
+  reasoningOptions: Schema.Array(AgentChoice),
+}) {}
+
+export const CodexProbe = Schema.Struct({
+  command: Schema.optionalKey(AgentCommand),
+  model: Schema.optionalKey(Schema.NonEmptyString),
+  path: Schema.NonEmptyString,
+  reasoning: Schema.optionalKey(Schema.NonEmptyString),
+});
 
 export const Title = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(240));
 export const Brief = Schema.String.check(Schema.isMaxLength(100_000));
@@ -37,6 +55,17 @@ export class PipesError extends Schema.TaggedError<PipesError>()('PipesError', {
 }) {}
 
 export class PipesRpcs extends RpcGroup.make(
+  Rpc.make('codexProbe', { error: PipesError, payload: CodexProbe, success: CodexSettings }),
+  Rpc.make('codexSetup', {
+    error: PipesError,
+    payload: { agent: Agent, path: Schema.NonEmptyString },
+    success: Schema.String,
+  }),
+  Rpc.make('configCheck', {
+    error: PipesError,
+    payload: { path: Schema.NonEmptyString },
+    success: Schema.String,
+  }),
   Rpc.make('snapshot', { error: PipesError, success: Snapshot }),
   Rpc.make('watch', { error: PipesError, stream: true, success: Snapshot }),
   Rpc.make('register', {

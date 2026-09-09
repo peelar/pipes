@@ -1,5 +1,5 @@
 import { SqliteClient, SqliteMigrator } from '@effect/sql-sqlite-bun';
-import { Context, DateTime, Effect, Layer, Schema } from 'effect';
+import { Context, DateTime, Effect, Layer, PubSub, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { SqlClient } from 'effect/unstable/sql';
 import { basename } from 'node:path';
@@ -18,6 +18,7 @@ export class Store extends Context.Service<
       repositoryId: string;
       title: string;
     }) => Effect.Effect<Task, PipesError>;
+    readonly watch: Stream.Stream<Snapshot, PipesError>;
   }
 >()('pipes/Store') {
   static layer = (filename: string) =>
@@ -26,6 +27,9 @@ export class Store extends Context.Service<
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const changes = yield* PubSub.sliding<void>({ capacity: 1, replay: 1 });
+        yield* Effect.addFinalizer(() => PubSub.shutdown(changes));
+        yield* PubSub.publish(changes, undefined);
         yield* sql`PRAGMA foreign_keys = ON`;
         yield* SqliteMigrator.run({
           loader: SqliteMigrator.fromRecord({
@@ -117,7 +121,14 @@ export class Store extends Context.Service<
             );
         });
 
-        return Store.of({ register, snapshot, submit });
+        return Store.of({
+          register: (path) =>
+            register(path).pipe(Effect.tap(() => PubSub.publish(changes, undefined))),
+          snapshot,
+          submit: (input) =>
+            submit(input).pipe(Effect.tap(() => PubSub.publish(changes, undefined))),
+          watch: Stream.fromPubSub(changes).pipe(Stream.mapEffect(() => snapshot)),
+        });
       }),
     ).pipe(Layer.provide(SqliteClient.layer({ filename })));
 }

@@ -1,15 +1,100 @@
 import { expect, test } from 'bun:test';
+import { useKeyboard } from '@opentui/react';
 import { testRender } from '@opentui/react/test-utils';
-import { ManagedRuntime, Schema } from 'effect';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { Effect, Layer, ManagedRuntime, Schema } from 'effect';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { act } from 'react';
+import { act, useState } from 'react';
+import { writeCodexFixture } from '../../test/codex-fixture';
 import { Client, requireSupportedBun } from '../client/connection';
 import { Repository, Snapshot } from '../protocol/pipes';
 import { App } from './app';
-import { completePath, expandPath, gitRoot } from './repository-picker';
+import { CodexSetup } from './codex-setup';
+import { readOnboarding } from './onboarding';
+import { completePath, directories, expandPath, gitRoot } from './repository-picker';
 import { claimWelcome, logo, Welcome } from './welcome';
+
+test('directory listing includes folder symlinks and skips files, broken links, and .git', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pipes-directories-'));
+  mkdirSync(join(directory, 'folder'));
+  mkdirSync(join(directory, '.git'));
+  writeFileSync(join(directory, 'file'), '');
+  symlinkSync('folder', join(directory, 'linked-folder'));
+  symlinkSync('file', join(directory, 'linked-file'));
+  symlinkSync('missing', join(directory, 'broken'));
+  expect(await directories(directory)).toEqual(['folder', 'linked-folder']);
+});
+
+test('parent renders do not restart a pending Codex check', async () => {
+  let checks = 0;
+  let cancelled = 0;
+  const runtime = ManagedRuntime.make(
+    Layer.effect(
+      Client,
+      Effect.map(Client, (client) =>
+        Client.of({
+          ...client,
+          codexProbe: () =>
+            Effect.sync(() => {
+              checks++;
+            }).pipe(
+              Effect.andThen(Effect.never),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  cancelled++;
+                }),
+              ),
+            ),
+        }),
+      ),
+    ).pipe(
+      Layer.provide(
+        Client.layer({
+          directory: tmpdir(),
+          port: 1,
+          token: 'test',
+          url: 'http://127.0.0.1:1',
+        }),
+      ),
+    ),
+  );
+  function Parent() {
+    const [render, setRender] = useState(0);
+    useKeyboard(() => setRender((value) => value + 1));
+    return (
+      <box>
+        <text>{render}</text>
+        <CodexSetup onClose={() => {}} onReady={() => {}} path={tmpdir()} runtime={runtime} />
+      </box>
+    );
+  }
+  const view = await testRender(<Parent />, { height: 24, width: 100 });
+  try {
+    await act(async () => {
+      await Bun.sleep(50);
+    });
+    expect(checks).toBe(1);
+    await act(async () => {
+      view.mockInput.pressKey('x');
+    });
+    expect(checks).toBe(1);
+    expect(cancelled).toBe(0);
+  } finally {
+    await act(async () => {
+      view.renderer.destroy();
+    });
+    await runtime.dispose();
+  }
+  expect(cancelled).toBe(1);
+});
 
 test('first launch animates the README logo once, continues automatically, and supports skipping', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pipes-welcome-'));
@@ -24,7 +109,7 @@ test('first launch animates the README logo once, continues automatically, and s
     { height: 24, width: 80 },
   );
   try {
-    await view.waitForFrame((frame) => frame.includes('Press any key'));
+    await view.waitForFrame((frame) => frame.includes('Press [any key]'));
     expect(view.captureCharFrame()).not.toContain('Queue ready');
     await act(async () => {
       await Bun.sleep(160);
@@ -51,7 +136,7 @@ test('first launch animates the README logo once, continues automatically, and s
     { height: 24, width: 80 },
   );
   try {
-    await skipped.waitForFrame((frame) => frame.includes('Press any key'));
+    await skipped.waitForFrame((frame) => frame.includes('Press [any key]'));
     await act(async () => {
       skipped.mockInput.pressKey('RETURN');
     });
@@ -69,7 +154,7 @@ test('first launch animates the README logo once, continues automatically, and s
   );
   try {
     await reopened.waitForFrame((frame) => frame.includes('Queue ready'));
-    expect(reopened.captureCharFrame()).not.toContain('Press any key');
+    expect(reopened.captureCharFrame()).not.toContain('Press [any key]');
   } finally {
     await act(async () => {
       reopened.renderer.destroy();
@@ -105,7 +190,12 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
   const reservation = Bun.serve({ fetch: () => new Response(), port: 0 });
   const port = reservation.port!;
   await reservation.stop(true);
-  const env = { ...process.env, PIPES_DATA_DIR: directory, PIPES_PORT: String(port) };
+  const command = [process.execPath, writeCodexFixture(directory)];
+  const env = {
+    ...process.env,
+    PIPES_DATA_DIR: directory,
+    PIPES_PORT: String(port),
+  };
   const cli = async (...args: Array<string>) => {
     const child = Bun.spawn([process.execPath, 'src/cli.ts', ...args], {
       env,
@@ -134,6 +224,9 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
   let view: Awaited<ReturnType<typeof testRender>> | undefined;
   try {
     expect((await list()).tasks).toHaveLength(0);
+    const missingAgentDirectory = await cli('agent', join(directory, 'missing'));
+    expect(missingAgentDirectory.code).not.toBe(0);
+    expect(missingAgentDirectory.stdout + missingAgentDirectory.stderr).toContain('Cannot launch');
     const registered = await cli('register', process.cwd());
     expect(registered.code).toBe(0);
     const repository = Schema.decodeUnknownSync(Repository)(JSON.parse(registered.stdout));
@@ -151,60 +244,130 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
       url: `http://127.0.0.1:${port}`,
     };
     expect((await fetch(`${connection.url}/health`)).status).toBe(403);
-    runtime = ManagedRuntime.make(Client.layer(connection));
-    view = await testRender(<App onQuit={() => {}} runtime={runtime} startDirectory={nested} />, {
-      height: 32,
-      width: 110,
-    });
+    runtime = ManagedRuntime.make(
+      Layer.effect(
+        Client,
+        Effect.map(Client, (client) =>
+          Client.of({
+            ...client,
+            codexProbe: (input, options) => client.codexProbe({ ...input, command }, options),
+            codexSetup: (input, options) =>
+              client.codexSetup({ ...input, agent: { ...input.agent, command } }, options),
+          }),
+        ),
+      ).pipe(Layer.provide(Client.layer(connection))),
+    );
+    view = await testRender(
+      <App
+        onboardingDirectory={directory}
+        onQuit={() => {}}
+        runtime={runtime}
+        startDirectory={nested}
+      />,
+      {
+        height: 32,
+        width: 110,
+      },
+    );
+    const waitForAgent = async (text: string) => {
+      for (let attempt = 0; attempt < 60; attempt++) {
+        await act(async () => {
+          await Bun.sleep(50);
+        });
+        await view!.flush();
+        if (view!.captureCharFrame().includes(text)) {
+          return;
+        }
+      }
+      expect(view!.captureCharFrame()).toContain(text);
+    };
+    await waitForAgent('Connect this repository');
+    expect(view.captureCharFrame()).toContain('1/3');
     await act(async () => {
-      await Bun.sleep(100);
+      view!.mockInput.pressKey('RETURN');
     });
-    await view.waitForFrame((frame) => frame.includes('Do you want to initialize'));
-    expect(view.captureCharFrame()).toContain('Queue');
-    expect(view.captureCharFrame()).toContain('● connected');
+    await waitForAgent('Connected to Codex');
+    expect(view.captureCharFrame()).not.toContain('Choose a model');
+    expect(view.captureCharFrame()).toContain('2/3');
+    expect(readOnboarding(directory).complete).toBe(false);
     await act(async () => {
-      view!.mockInput.pressKey('r');
+      view!.mockInput.pressKey('ESCAPE');
     });
-    expect(view.captureCharFrame()).not.toContain('Enter selects');
-    expect((await list()).repositories).toHaveLength(1);
-    await act(async () => {
-      view!.mockInput.pressKey('n');
-      await Bun.sleep(1100);
-    });
-    await view.waitForFrame((frame) => frame.includes('connected'));
-    expect(view.captureCharFrame()).not.toContain('Do you want to initialize');
-    expect((await list()).repositories).toHaveLength(1);
     await act(async () => {
       view!.renderer.destroy();
     });
-    view = await testRender(<App onQuit={() => {}} runtime={runtime} startDirectory={nested} />, {
-      height: 32,
-      width: 110,
-    });
-    await act(async () => {
-      await Bun.sleep(100);
-    });
-    await view.waitForFrame((frame) => frame.includes('Do you want to initialize'));
+    view = await testRender(
+      <App
+        onboardingDirectory={directory}
+        onQuit={() => {}}
+        runtime={runtime}
+        startDirectory={nested}
+      />,
+      { height: 32, width: 110 },
+    );
+    await waitForAgent('Connected to Codex');
     await act(async () => {
       view!.mockInput.pressKey('RETURN');
-      await Bun.sleep(200);
     });
-    await view.waitForFrame((frame) => frame.includes('connected') && frame.includes('Press n'));
+    await waitForAgent('example pipes.');
+    expect(view.captureCharFrame()).toContain('3/3');
+    expect(view.captureCharFrame()).not.toContain('Connected to Codex');
+    expect(view.captureCharFrame()).toContain('export default {');
+    expect(view.captureCharFrame()).toContain("name: 'review'");
+    expect(view.captureCharFrame()).not.toContain('Choose a model');
+    expect(readOnboarding(directory).complete).toBe(false);
+    expect(view.captureCharFrame()).toContain('[Enter] create');
+    await act(async () => {
+      view!.mockInput.pressKey('RETURN');
+      await Bun.sleep(500);
+    });
+    for (let attempt = 0; attempt < 60 && !readOnboarding(directory).complete; attempt++) {
+      await act(async () => {
+        await Bun.sleep(50);
+      });
+    }
+    expect(readOnboarding(directory).complete).toBe(true);
+    await waitForAgent('✓ Setup complete');
+    expect(view.captureCharFrame()).not.toContain('Setup · 3/3');
+    await act(async () => {
+      const configured = await cli('config', first);
+      expect(configured.code).toBe(0);
+      expect(
+        JSON.parse(configured.stdout).workflows['plan-implement-review'].steps[0].agent,
+      ).toEqual({ command, model: 'small', provider: 'codex', reasoning: 'low' });
+      const discovered = await cli(
+        'agent',
+        first,
+        '--command',
+        JSON.stringify(command),
+        '--model',
+        'large',
+        '--reasoning',
+        'high',
+      );
+      expect(discovered.code).toBe(0);
+      expect(JSON.parse(discovered.stdout).reasoning).toBe('high');
+      expect((await cli('agent', first, '--setup')).code).not.toBe(0);
+      expect((await cli('agent', first, '--command', '[]')).code).not.toBe(0);
+    });
     expect((await list()).repositories).toHaveLength(2);
     await act(async () => {
       view!.renderer.destroy();
     });
-    view = await testRender(<App onQuit={() => {}} runtime={runtime} startDirectory={nested} />, {
-      height: 32,
-      width: 110,
-    });
+    view = await testRender(
+      <App
+        onboardingDirectory={directory}
+        onQuit={() => {}}
+        runtime={runtime}
+        startDirectory={nested}
+      />,
+      { height: 32, width: 110 },
+    );
+    await waitForAgent('● connected');
+    expect(view.captureCharFrame()).not.toContain('Setup ·');
+    expect(view.captureCharFrame()).toContain('[c] connect');
     await act(async () => {
-      await Bun.sleep(100);
-    });
-    await view.waitForFrame((frame) => frame.includes('connected'));
-    expect(view.captureCharFrame()).not.toContain('Do you want to initialize');
-    await act(async () => {
-      view!.mockInput.pressKey('r');
+      view!.mockInput.pressKey('c');
       await Bun.sleep(100);
     });
     await act(async () => {
@@ -260,15 +423,15 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     await act(async () => {
       await Bun.sleep(100);
     });
-    await view.waitForFrame((frame) => frame.includes('Register this repository'));
+    await view.waitForFrame((frame) => frame.includes('Connect this repository'));
     await act(async () => {
       view!.mockInput.pressKey('RETURN');
       await Bun.sleep(200);
     });
-    await view.waitForFrame((frame) => !frame.includes('Enter selects'));
+    await view.waitForFrame((frame) => !frame.includes('[Enter] selects'));
     expect((await list()).repositories).toHaveLength(3);
     await act(async () => {
-      view!.mockInput.pressKey('r');
+      view!.mockInput.pressKey('c');
     });
     await act(async () => {
       await Bun.sleep(100);
@@ -277,7 +440,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
       view!.mockInput.pressKey('ESCAPE');
       await Bun.sleep(100);
     });
-    await view.waitForFrame((frame) => !frame.includes('Enter selects'));
+    await view.waitForFrame((frame) => !frame.includes('[Enter] selects'));
     expect((await list()).repositories).toHaveLength(3);
     await act(async () => {
       const submitted = await cli(
@@ -327,9 +490,11 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     await Bun.sleep(300);
     expect(await list()).toEqual(before);
     const reset = () =>
-      Bun.spawn([process.execPath, 'run', 'db:reset'], { env, stderr: 'pipe', stdout: 'pipe' });
+      Bun.spawn([process.execPath, 'run', 'reset'], { env, stderr: 'pipe', stdout: 'pipe' });
     expect(await reset().exited).toBe(0);
     expect(existsSync(join(directory, 'pipes.sqlite'))).toBe(false);
+    expect(existsSync(join(directory, 'onboarding.json'))).toBe(false);
+    expect(existsSync(join(first, '.pipes/pipes.ts'))).toBe(false);
     expect(await reset().exited).toBe(0);
     expect(await list()).toEqual(new Snapshot({ repositories: [], tasks: [], transitions: [] }));
   } finally {

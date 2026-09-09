@@ -109,7 +109,7 @@ Environment cleanup is explicit. Refuse cleanup of active or human-owned environ
 
 ## Interactive handoff
 
-The TUI is keyboard-first. A configured action such as `O` opens a task in a new terminal pane or window. Terminal launch configuration is separate from harness launch configuration.
+The TUI is keyboard-first. Display keyboard shortcuts in brackets, with `[c] connect` for connecting repositories. A configured action such as `O` opens a task in a new terminal pane or window. Terminal launch configuration is separate from harness launch configuration.
 
 Opening defaults to inspection. Claiming is a separate action: stop the current worker and confirm it has stopped before granting human ownership. Inspection must not rely only on prompt wording to prevent changes in supported harnesses.
 
@@ -135,11 +135,15 @@ Lease expiration signals uncertainty, not proof that a worker stopped. Confirm t
 
 The first TUI launch shows an animated Pipes logo before repository onboarding. Later launches skip it.
 
-Onboarding starts with configuring agents and connecting GitHub. Discover supported installed providers, let the user select advertised settings, and verify the connection. Pipes provides instructions for missing installation or authentication; it does not manage those tools itself.
+A one-time, resumable wizard connects a repository, checks the automatic Codex connection, then confirms creation of example plan → implement → review pipes. The final [Enter] action creates `.pipes/pipes.ts` using Codex’s advertised default model and reasoning settings and completes onboarding after success. A brief success message appears in the main view after completion. There are no model selectors or extra ready screen. Existing configuration can be validated instead and is never overwritten. Finishing later resumes setup on the next launch. Agent settings remain editable per workflow step in configuration and setup remains available through [a]. GitHub connection is deferred. Pipes includes its agent adapters and runtimes; users do not install Codex, ACP adapters, Node, or package managers separately. Authentication uses the user’s account through Pipes.
+
+The Codex connection step only checks availability and authentication, showing “Connected to Codex” on success. The separate configuration step shows a compact addition diff of the example configuration, with abbreviated agent settings and prompts, without repeating the connection status. Agent settings are defined per workflow step rather than for the connection.
+
+Codex connection setup uses the maintained `@agentclientprotocol/codex-acp` adapter. Discover model choices through ACP, apply the selected model, then refresh its reasoning choices and verify the selected settings. Connection checks do not send an agent assignment. Selected settings can create the starter repository configuration; preserve existing TypeScript configuration and show the settings to incorporate into it.
 
 Repositories are registered explicitly through TUI or CLI. Check configuration and offer the starter workflow when missing. GitHub supplies work for registered repositories.
 
-For local registration, the TUI detects the repository containing its launch directory. If it is not registered, immediately ask whether to initialize it in Pipes, with explicit Yes/No choices in a centered modal over the main UI. The background remains visible but keyboard interaction stays in the modal. Declining continues without registration for that session; registered repositories are not prompted again. A keyboard directory picker supports browsing and typed paths with completion and home-directory expansion. Discovery does not register repositories automatically or scan the disk in the background.
+For local registration, the TUI detects the repository containing its launch directory. If it is not registered, outside the first-time wizard, ask whether to connect it to Pipes, with explicit Yes/No choices in a centered modal over the main UI. The background remains visible but keyboard interaction stays in the modal. Declining continues without registration for that session; registered repositories are not prompted again. A keyboard directory picker supports browsing and typed paths with completion and home-directory expansion. Discovery does not register repositories automatically or scan the disk in the background.
 
 GitHub is a continuous source, alongside manual submission through Pipes interfaces. Source mechanisms are abstract: GitHub uses webhooks; other sources may poll. Users provide reachable webhook connectivity, such as an endpoint or tunnel. Pipes requires no Pipes-operated relay.
 
@@ -178,7 +182,7 @@ The split is: **Effect owns execution; SQLite provides durability; Pipes owns wo
 
 The provider setting is an enum with only `codex` supported initially. Allow an optional custom ACP command override for that provider. Add other provider values explicitly as support is implemented.
 
-Support macOS and Linux; Windows users can use WSL. Ship an executable or release bundle containing the Pipes runtime. Agent providers and development tools remain separate prerequisites.
+Support macOS and Linux; Windows users can use WSL. Ship an executable or release bundle containing the Pipes runtime. Include the supported agent runtime and adapter in the distribution. Source development may require build tools; the installed product must not require users to install dependencies separately.
 
 ## Deferred
 

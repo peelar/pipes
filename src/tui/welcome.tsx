@@ -59,7 +59,7 @@ export function Welcome({ children, firstLaunch }: { children: ReactNode; firstL
               .map((line) => line.slice(0, columns).padEnd(53))
               .join('\n')}
       </text>
-      <text fg="#a6adc8">Press any key to continue</text>
+      <text fg="#a6adc8">Press [any key] to continue</text>
     </box>
   );
 }

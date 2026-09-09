@@ -11,8 +11,8 @@
     "./config": "./src/config.ts"
   },
   "scripts": {
-    "db:reset": "bun scripts/reset-db.ts",
-    "dev": "bun src/cli.ts",
+    "reset": "bun scripts/reset.ts",
+    "dev": "bun --watch src/cli.ts",
     "pipes": "bun src/cli.ts",
     "pipesd": "bun src/server.ts",
     "test": "bun test",
@@ -23,6 +23,8 @@
     "postinstall": "effect-tsgo patch"
   },
   "dependencies": {
+    "@agentclientprotocol/codex-acp": "1.10.0",
+    "@agentclientprotocol/sdk": "1.4.0",
     "@effect/platform-bun": "4.0.0-rc.112",
     "@effect/sql-sqlite-bun": "4.0.0-rc.112",
     "@opentui/core": "0.5.11",

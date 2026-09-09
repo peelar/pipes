@@ -1,10 +1,22 @@
 import { Effect, ManagedRuntime, Schema } from 'effect';
-import { rm } from 'node:fs/promises';
+import { readFile, rm, rmdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Client, ensureServer, settings } from '../src/client/connection';
 
 const connection = settings();
 const runtime = ManagedRuntime.make(Client.layer(connection));
+const onboardingFile = join(connection.directory, 'onboarding.json');
+
+const onboarding = await readFile(onboardingFile, 'utf8')
+  .then((json) =>
+    Schema.decodeSync(Schema.fromJsonString(Schema.Struct({ path: Schema.String })))(json),
+  )
+  .catch((error: unknown) => {
+    if (Schema.is(Schema.Struct({ code: Schema.Literal('ENOENT') }))(error)) {
+      return undefined;
+    }
+    throw error;
+  });
 
 try {
   const running = await runtime.runPromise(
@@ -48,9 +60,13 @@ try {
   ]) {
     await rm(join(connection.directory, name), { force: true });
   }
-  process.stdout.write(
-    `Deleted Pipes database in ${connection.directory}. No backup was created.\n`,
-  );
+  if (onboarding) {
+    const configDirectory = join(onboarding.path, '.pipes');
+    await rm(join(configDirectory, 'pipes.ts'), { force: true });
+    await rmdir(configDirectory).catch(() => {});
+  }
+  await rm(onboardingFile, { force: true });
+  process.stdout.write(`Reset Pipes state in ${connection.directory}. No backup was created.\n`);
 } finally {
   await runtime.dispose();
 }

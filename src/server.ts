@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
 import { BunRuntime, BunServices } from '@effect/platform-bun';
-import { Deferred, Effect, Layer, Schedule, Stream } from 'effect';
+import { Deferred, Effect, Layer } from 'effect';
 import { HttpEffect } from 'effect/unstable/http';
 import { RpcSerialization, RpcServer } from 'effect/unstable/rpc';
 import { join } from 'node:path';
 import { settings, type Connection } from './client/connection';
 import { PipesError, PipesRpcs } from './protocol/pipes';
 import { Store } from './server/store';
+import { checkCodexConfig, probeCodex, setupCodex } from './server/codex';
 
 export const serve = Effect.fn('serve')(function* (connection: Connection) {
   const stopped = yield* Deferred.make<void>();
@@ -14,12 +15,14 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
     Effect.gen(function* () {
       const store = yield* Store;
       return {
-        snapshot: () => store.snapshot,
-        // ponytail: refresh the small queue once a second; use invalidation when queue size warrants it.
+        codexProbe: probeCodex,
+        codexSetup: setupCodex,
+        configCheck: ({ path }) => checkCodexConfig(path),
         register: ({ path }) => store.register(path),
         shutdown: () => Deferred.succeed(stopped, undefined).pipe(Effect.asVoid),
+        snapshot: () => store.snapshot,
         submit: (input) => store.submit(input),
-        watch: () => Stream.fromEffectSchedule(store.snapshot, Schedule.spaced('1 second')),
+        watch: () => store.watch,
       };
     }),
   );
