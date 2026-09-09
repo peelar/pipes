@@ -28,23 +28,28 @@ function taskViewActive(mode: string, modal: unknown) {
   return mode === 'queue' && !modal;
 }
 
-export function taskShortcuts(run: Run | undefined) {
+function taskActionShortcuts(run: Run | undefined) {
   const actions = taskActions(run);
   return [
     actions.start && (run?.status === 'human_owned' ? '[s] return control' : '[s] start'),
+    actions.discard && '[d] discard',
     actions.cancel && '[x] cancel',
     actions.jumpIn && '[j] jump in',
-    run && '[v] view conversation',
-    actions.discard && '[d] discard',
   ]
     .filter(Boolean)
     .join('  ');
 }
 
+export function taskShortcuts(run: Run | undefined) {
+  return [taskActionShortcuts(run), run && '[v] view conversation'].filter(Boolean).join('  ');
+}
+
 function shortcuts(busy: boolean, task: Task | undefined, run: Run | undefined) {
-  return busy
-    ? 'Working…'
-    : [task && taskShortcuts(run), '[n] new  [m] manage  [q] quit'].filter(Boolean).join('  ');
+  return busy ? 'Working…' : task ? taskActionShortcuts(run) : '';
+}
+
+function viewShortcut(busy: boolean, run: Run | undefined) {
+  return busy || !run ? '' : '[v] view conversation';
 }
 
 function emptyQueue(repository: string | undefined) {
@@ -470,6 +475,7 @@ export function App({
             <select
               flexGrow={1}
               focused={paneFocused(mode, pane, 'queue', modal)}
+              minHeight={0}
               onChange={(index) => setSelected(index)}
               options={snapshot.tasks.map((item) => ({
                 description: `${statusVisuals[item.status].label} · ${item.sourceId?.split(':', 1)[0] ?? 'manual'}`,
@@ -479,12 +485,20 @@ export function App({
               showScrollIndicator
             />
           ) : (
-            <text>{emptyQueue(repository?.name)}</text>
+            <text flexGrow={1}>{emptyQueue(repository?.name)}</text>
           )}
+          <box border={['top']} borderColor="#585b70" flexShrink={0} paddingTop={1} width="100%">
+            <text fg="#a6adc8">[n] new</text>
+          </box>
         </box>
         <box border flexDirection="column" flexGrow={1} padding={1} title="Task">
           {task ? (
-            <scrollbox flexGrow={1} focused={paneFocused(mode, pane, 'task', modal)} key={task.id}>
+            <scrollbox
+              flexGrow={1}
+              focused={paneFocused(mode, pane, 'task', modal)}
+              key={task.id}
+              minHeight={0}
+            >
               <TaskDetails
                 active={taskViewActive(mode, modal)}
                 repository={
@@ -496,8 +510,20 @@ export function App({
               />
             </scrollbox>
           ) : (
-            <text>Select a task to track its progress.</text>
+            <text flexGrow={1}>Select a task to track its progress.</text>
           )}
+          <box
+            border={['top']}
+            borderColor="#585b70"
+            flexDirection="row"
+            flexShrink={0}
+            justifyContent="space-between"
+            paddingTop={1}
+            width="100%"
+          >
+            <text fg="#a6adc8">{shortcuts(busy, task, run)}</text>
+            <text fg="#a6adc8">{viewShortcut(busy, run)}</text>
+          </box>
         </box>
       </box>
       {mode === 'register' && (
@@ -553,7 +579,9 @@ export function App({
       )}
       {success && <text fg="#a6e3a1">✓ Setup complete · {success}</text>}
       {error && <text fg="#f38ba8">{error}</text>}
-      <text fg="#a6adc8">{shortcuts(busy, task, run)}</text>
+      <box border={['top']} borderColor="#585b70" flexShrink={0} paddingTop={1} width="100%">
+        <text fg="#a6adc8">[m] manage [q] quit</text>
+      </box>
       {mode === 'conversation' && task && (
         <Conversation
           onClose={() => setMode('queue')}
