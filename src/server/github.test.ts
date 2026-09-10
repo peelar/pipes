@@ -20,6 +20,8 @@ const issue = {
   title: 'Fix this',
 };
 const policy = { repository: 'owner/repo', workflow: 'plan-implement-review' };
+// The checked-in example config carries a GitHub policy; fixtures start without one so attach can create it.
+const { github: _examplePolicy, ...exampleWithoutPolicy } = example;
 const git = async (...args: Array<string>) => {
   expect(await Bun.spawn(['git', ...args], { stderr: 'ignore', stdout: 'ignore' }).exited).toBe(0);
 };
@@ -77,7 +79,7 @@ test('GitHub connection validates remotes, preserves config, imports, and reuses
   );
   try {
     await mkdir(join(source, '.pipes'), { recursive: true });
-    const original = `// Keep this comment and ordinary TypeScript.\nconst config = ${JSON.stringify(example)};\nexport default config;\n`;
+    const original = `// Keep this comment and ordinary TypeScript.\nconst config = ${JSON.stringify(exampleWithoutPolicy)};\nexport default config;\n`;
     await writeFile(join(source, '.pipes/config.ts'), original);
     await writeFile(
       process.env.GIT_CONFIG_GLOBAL,
