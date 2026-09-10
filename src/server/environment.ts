@@ -1,17 +1,15 @@
-import { Context, Effect, Layer, Schema, Stream } from 'effect';
+import { Context, Effect, Layer, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { Config, type Agent } from '../config';
 import { PipesError, type Run, type StepResult } from '../protocol/pipes';
 import { selfCommand } from '../self';
-import { codexBinary, openCodex, probeCodex } from './codex';
+import { codexBinary, openCodex, probeCodex } from './codex-acp';
+import { failure } from './errors';
+import { makeGit } from './git';
 import { resultMcp } from './result-mcp';
 
-const failure = (error: unknown) =>
-  error instanceof PipesError ? error : new PipesError({ message: String(error) });
 const codexHome = () => resolve(process.env.CODEX_HOME ?? join(homedir(), '.codex'));
 type Session = { codexHome: string; sessionId: string };
 type Report = (result: typeof StepResult.Type) => Promise<void>;
@@ -28,7 +26,7 @@ export function resumeArguments(run: Run, url: string) {
     `mcp_servers.pipes_handoff.url=${JSON.stringify(url)}`,
     '-c',
     'mcp_servers.pipes_handoff.bearer_token_env_var="PIPES_HANDOFF_TOKEN"',
-    `Interactive Pipes handoff: task ${run.taskId}, run ${run.id}, step ${attempt.step}, attempt ${attempt.id}. The detached worker has stopped. The human owns this step; wait for their instructions. Earlier conversation and workspace are preserved. Use the refreshed pipes_handoff report_result tool; the detached attempt's endpoint has expired. Reporting records an outcome, but does not start sibling steps. Do not push, publish, or merge. Closing Codex leaves the task held; the human must explicitly return control in Pipes.`,
+    `Interactive pipes handoff: task ${run.taskId}, run ${run.id}, step ${attempt.step}, attempt ${attempt.id}. The detached worker has stopped. The human owns this step; wait for their instructions. Earlier conversation and workspace are preserved. Use the refreshed pipes_handoff report_result tool; the detached attempt's endpoint has expired. Reporting records an outcome, but does not start sibling steps. Do not push, publish, or merge. Closing Codex leaves the task held; the human must explicitly return control in pipes.`,
   ];
 }
 
@@ -60,14 +58,12 @@ export class Environment extends Context.Service<
     Environment,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const gitOps = makeGit(spawner);
       const configuration = Effect.fn('Environment.configuration')(function* (repository: string) {
         const { args, executable } = selfCommand(['config', repository]);
         const output = yield* spawner.string(ChildProcess.make(executable, args));
         return yield* Schema.decodeEffect(Schema.fromJsonString(Config))(output);
       }, Effect.mapError(failure));
-      const exists = Effect.fn('Environment.exists')(function* (run: Run) {
-        return yield* Effect.try({ catch: failure, try: () => existsSync(run.workspace) });
-      });
       const probe = Effect.fn('Environment.probe')(
         function* (path: string, agent: typeof Agent.Type) {
           yield* probeCodex({ ...agent, path });
@@ -156,74 +152,6 @@ export class Environment extends Context.Service<
         Effect.scoped,
         Effect.mapError(failure),
       );
-      const git = Effect.fn('Environment.git')(
-        function* (cwd: string, args: ReadonlyArray<string>) {
-          const handle = yield* spawner.spawn(
-            ChildProcess.make('git', ['-C', cwd, ...args], { stderr: 'ignore' }),
-          );
-          const output = yield* handle.stdout.pipe(Stream.decodeText(), Stream.mkString);
-          if ((yield* handle.exitCode) !== 0) {
-            return yield* new PipesError({
-              message: `git ${args[0]} failed in ${cwd}. Workspace changes are preserved.`,
-            });
-          }
-          return output.trim();
-        },
-        Effect.scoped,
-        Effect.mapError((error) =>
-          error instanceof PipesError ? error : new PipesError({ message: String(error) }),
-        ),
-      );
-      const prepare = Effect.fn('Environment.prepare')(function* (repository: string, run: Run) {
-        yield* Effect.tryPromise({
-          catch: (error) => new PipesError({ message: String(error) }),
-          try: () => mkdir(dirname(run.workspace), { recursive: true }),
-        });
-        const branchExists = yield* git(repository, [
-          'show-ref',
-          '--verify',
-          '--quiet',
-          `refs/heads/${run.branch}`,
-        ]).pipe(
-          Effect.map(() => true),
-          Effect.orElseSucceed(() => false),
-        );
-        yield* git(
-          repository,
-          branchExists
-            ? ['worktree', 'add', run.workspace, run.branch]
-            : ['worktree', 'add', '-b', run.branch, run.workspace, run.baseRevision],
-        );
-      });
-      const checkpoint = Effect.fn('Environment.checkpoint')(function* (run: Run) {
-        yield* git(run.workspace, ['add', '-A']);
-        if (yield* git(run.workspace, ['diff', '--cached', '--name-only'])) {
-          yield* git(run.workspace, [
-            '-c',
-            'user.name=Pipes',
-            '-c',
-            'user.email=pipes@localhost',
-            '-c',
-            'core.hooksPath=/dev/null',
-            '-c',
-            'commit.gpgSign=false',
-            'commit',
-            '-m',
-            `Pipes checkpoint ${run.id}`,
-          ]);
-        }
-        return yield* git(run.workspace, ['rev-parse', 'HEAD']);
-      });
-      const cleanup = Effect.fn('Environment.cleanup')(function* (repository: string, run: Run) {
-        if (['queued', 'running', 'cancelling', 'human_owned'].includes(run.status)) {
-          return yield* new PipesError({
-            message: 'Cannot clean up an active or human-owned environment.',
-          });
-        }
-        if (existsSync(run.workspace)) {
-          yield* git(repository, ['worktree', 'remove', '--force', '--', run.workspace]);
-        }
-      });
       const setup = Effect.fn('Environment.setup')(
         function* (cwd: string, command: ReadonlyArray<string>) {
           const handle = yield* spawner.spawn(
@@ -245,18 +173,13 @@ export class Environment extends Context.Service<
         ),
       );
       return Environment.of({
-        checkpoint,
-        cleanup,
+        ...gitOps,
         configuration,
         execute,
-        exists,
-        git,
         handoffSession,
-        prepare,
         probe,
         resume,
         setup,
-        workspace: (directory, runId) => join(directory, 'worktrees', runId),
       });
     }),
   );
