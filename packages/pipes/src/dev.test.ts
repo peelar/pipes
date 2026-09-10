@@ -17,10 +17,10 @@ test('dev applies pending migrations before opening the TUI on startup and watch
   try {
     await writeFile(join(directory, 'token'), connection.token, { mode: 0o600 });
     await cp('packages', join(directory, 'packages'), { recursive: true });
-    // Drop the copied per-package node_modules: they link back into this
-    // checkout, which would shadow the fixture's own node_modules/@pipes
-    // links for code imported from under packages/.
-    for (const name of await readdir(join(directory, 'packages'))) {
+    const packageNames = await readdir(join(directory, 'packages'));
+    // Copied Bun workspace links are rewritten to point back at this checkout.
+    // Remove them so watch reloads cannot import the original package sources.
+    for (const name of packageNames) {
       await rm(join(directory, 'packages', name, 'node_modules'), {
         force: true,
         recursive: true,
@@ -28,19 +28,40 @@ test('dev applies pending migrations before opening the TUI on startup and watch
     }
     await cp('skills', join(directory, 'skills'), { recursive: true });
     await cp('tsconfig.json', join(directory, 'tsconfig.json'));
-    // Mirror the root node_modules but resolve workspace packages to the copy,
-    // so watch reloads exercise the copied tree instead of the real one.
-    await mkdir(join(directory, 'node_modules', '@pipes'), { recursive: true });
-    for (const entry of await readdir(resolve('node_modules'))) {
-      if (entry !== '@pipes') {
-        await symlink(join(resolve('node_modules'), entry), join(directory, 'node_modules', entry));
+    // Merge root and isolated package dependencies into the fixture root while
+    // resolving every workspace package to its copied source tree.
+    const fixtureModules = join(directory, 'node_modules');
+    const linked = new Set<string>();
+    for (const dependencyRoot of [
+      resolve('node_modules'),
+      ...packageNames.map((name) => resolve('packages', name, 'node_modules')),
+    ]) {
+      for (const entry of await readdir(dependencyRoot)) {
+        if (entry === '.bin' || entry === '.bun') {
+          continue;
+        }
+        if (!entry.startsWith('@')) {
+          if (!linked.has(entry)) {
+            await symlink(join(dependencyRoot, entry), join(fixtureModules, entry));
+            linked.add(entry);
+          }
+          continue;
+        }
+        await mkdir(join(fixtureModules, entry), { recursive: true });
+        for (const name of await readdir(join(dependencyRoot, entry))) {
+          const key = `${entry}/${name}`;
+          if (linked.has(key)) {
+            continue;
+          }
+          await symlink(
+            entry === '@pipes'
+              ? join(directory, 'packages', name)
+              : join(dependencyRoot, entry, name),
+            join(fixtureModules, entry, name),
+          );
+          linked.add(key);
+        }
       }
-    }
-    for (const name of await readdir(join(directory, 'packages'))) {
-      await symlink(
-        join(directory, 'packages', name),
-        join(directory, 'node_modules', '@pipes', name),
-      );
     }
     const repositoryPath = join(directory, 'project');
     await mkdir(repositoryPath);
