@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = join(import.meta.dirname, '..');
-const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+const { version } = JSON.parse(readFileSync(join(root, 'packages/pipes/package.json'), 'utf8')) as {
   version: string;
 };
 const asset = (target: string) => `pipes-${target.replace(/^bun-/, '')}`;
@@ -38,7 +38,7 @@ for (const { args, outfile } of jobs) {
     'bun',
     [
       'build',
-      join(root, 'src/main.ts'),
+      join(root, 'packages/pipes/src/main.ts'),
       '--compile',
       ...args,
       '--define',

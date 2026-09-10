@@ -1,7 +1,7 @@
 import { Effect, ManagedRuntime, Schema } from 'effect';
 import { readFile, rm, rmdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ensureServer, settings } from '../src/client/connection';
+import { ensureServer, settings } from '../packages/pipes/src/client/connection';
 import { Client } from '@pipes/protocol';
 
 const connection = settings();

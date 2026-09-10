@@ -4,20 +4,6 @@
   "workspaces": {
     "": {
       "name": "pipes",
-      "dependencies": {
-        "@agentclientprotocol/codex-acp": "1.10.0",
-        "@agentclientprotocol/sdk": "1.4.0",
-        "@effect/platform-bun": "4.0.0-rc.112",
-        "@effect/sql-sqlite-bun": "4.0.0-rc.112",
-        "@opentui/core": "0.5.11",
-        "@opentui/react": "0.5.11",
-        "@pipes/mcp": "workspace:*",
-        "@pipes/protocol": "workspace:*",
-        "@pipes/server": "workspace:*",
-        "@pipes/tui": "workspace:*",
-        "effect": "4.0.0-rc.112",
-        "react": "19.2.4",
-      },
       "devDependencies": {
         "@changesets/cli": "^3.0.2",
         "@effect/tsgo": "0.43.0",
@@ -39,6 +25,28 @@
       "dependencies": {
         "@pipes/protocol": "workspace:*",
         "effect": "4.0.0-rc.112",
+      },
+    },
+    "packages/pipes": {
+      "name": "pipes",
+      "version": "0.0.1",
+      "bin": {
+        "pipes": "src/cli.ts",
+        "pipesd": "src/server.ts",
+      },
+      "dependencies": {
+        "@agentclientprotocol/codex-acp": "1.10.0",
+        "@agentclientprotocol/sdk": "1.4.0",
+        "@effect/platform-bun": "4.0.0-rc.112",
+        "@effect/sql-sqlite-bun": "4.0.0-rc.112",
+        "@opentui/core": "0.5.11",
+        "@opentui/react": "0.5.11",
+        "@pipes/mcp": "workspace:*",
+        "@pipes/protocol": "workspace:*",
+        "@pipes/server": "workspace:*",
+        "@pipes/tui": "workspace:*",
+        "effect": "4.0.0-rc.112",
+        "react": "19.2.4",
       },
     },
     "packages/protocol": {
@@ -769,6 +777,8 @@
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 
     "picomatch": ["picomatch@4.0.7", "", {}, "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA=="],
+
+    "pipes": ["pipes@workspace:packages/pipes"],
 
     "pngjs": ["pngjs@7.0.0", "", {}, "sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow=="],
 

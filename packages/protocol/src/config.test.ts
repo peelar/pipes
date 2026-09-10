@@ -59,7 +59,7 @@ test('configuration validates the example and rejects malformed workflow setting
       `export default ${JSON.stringify(example)};`,
     );
     const child = Bun.spawn(
-      [process.execPath, join(import.meta.dirname, '../../../src/cli.ts'), 'config', directory],
+      [process.execPath, join(import.meta.dirname, '../../pipes/src/cli.ts'), 'config', directory],
       {
         stderr: 'pipe',
         stdout: 'pipe',

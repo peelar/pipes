@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client, Run, type Task } from '@pipes/protocol';
-import { serve } from '../src/server';
+import { serve } from '../packages/pipes/src/server';
 import { writeCodexFixture } from './codex-fixture';
 
 export const harnessGit = async (cwd: string, ...args: Array<string>) => {

@@ -7,7 +7,7 @@ export default defineConfig({
     extends: [nkzw],
     overrides: [
       {
-        files: ['src/**/*.tsx', 'packages/**/*.tsx'],
+        files: ['packages/**/*.tsx'],
         rules: {
           // OpenTUI uses terminal elements, not React DOM properties.
           'react/no-unknown-property': 'off',

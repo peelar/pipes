@@ -208,7 +208,7 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     PIPES_PORT: String(port),
   };
   const cli = async (...args: Array<string>) => {
-    const child = Bun.spawn([process.execPath, 'src/cli.ts', ...args], {
+    const child = Bun.spawn([process.execPath, 'packages/pipes/src/cli.ts', ...args], {
       env,
       stderr: 'pipe',
       stdout: 'pipe',

@@ -16,8 +16,16 @@ test('dev applies pending migrations before opening the TUI on startup and watch
   let child: Bun.Subprocess | undefined;
   try {
     await writeFile(join(directory, 'token'), connection.token, { mode: 0o600 });
-    await cp('src', join(directory, 'src'), { recursive: true });
     await cp('packages', join(directory, 'packages'), { recursive: true });
+    // Drop the copied per-package node_modules: they link back into this
+    // checkout, which would shadow the fixture's own node_modules/@pipes
+    // links for code imported from under packages/.
+    for (const name of await readdir(join(directory, 'packages'))) {
+      await rm(join(directory, 'packages', name, 'node_modules'), {
+        force: true,
+        recursive: true,
+      });
+    }
     await cp('skills', join(directory, 'skills'), { recursive: true });
     await cp('tsconfig.json', join(directory, 'tsconfig.json'));
     // Mirror the root node_modules but resolve workspace packages to the copy,
@@ -51,8 +59,8 @@ test('dev applies pending migrations before opening the TUI on startup and watch
       }),
     );
     const before = await runtime.runPromise(client.snapshot());
-    const serverPath = join(directory, 'src/server.ts');
-    const uiPath = join(directory, 'src/launch.tsx');
+    const serverPath = join(directory, 'packages/pipes/src/server.ts');
+    const uiPath = join(directory, 'packages/pipes/src/launch.tsx');
     const serverSource = await readFile(serverPath, 'utf8');
     const uiSource = await readFile(uiPath, 'utf8');
     await writeFile(serverPath, `${serverSource}\nexport const reloadMarker = 1;\n`);
@@ -77,9 +85,9 @@ import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Database } from 'bun:sqlite';
 import { Effect } from 'effect';
 import { writeFileSync } from 'node:fs';
-import { develop } from './src/dev';
-import { reloadMarker as server } from './src/server';
-import { reloadMarker as ui } from './src/launch';
+import { develop } from './packages/pipes/src/dev';
+import { reloadMarker as server } from './packages/pipes/src/server';
+import { reloadMarker as ui } from './packages/pipes/src/launch';
 develop(${JSON.stringify(connection)}, async (_, signal) => {
   const database = new Database(${JSON.stringify(join(directory, 'pipes.sqlite'))}, { readonly: true });
   const migrations = database.query("SELECT name FROM sqlite_master WHERE name LIKE 'dev_migration_%'").all().length;

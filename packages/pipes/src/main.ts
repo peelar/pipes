@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// Single entrypoint for the distributable binary (`bun build src/main.ts --compile`).
-// Development still runs `src/cli.ts`, `src/server.ts`, and `src/dev.ts` directly;
+// Single entrypoint for the distributable binary (`bun build packages/pipes/src/main.ts --compile`).
+// Development still runs `packages/pipes/src/cli.ts`, `packages/pipes/src/server.ts`, and `packages/pipes/src/dev.ts` directly;
 // only releases compile this file. Each mode lazy-loads its own module so the
 // helper modes (`__server`, `__codex-acp`) stay lean.
 export {};
