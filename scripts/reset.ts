@@ -1,7 +1,8 @@
 import { Effect, ManagedRuntime, Schema } from 'effect';
 import { readFile, rm, rmdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Client, ensureServer, settings } from '../src/client/connection';
+import { ensureServer, settings } from '../packages/pipes/src/client/connection';
+import { Client } from '@pipes/protocol';
 
 const connection = settings();
 const runtime = ManagedRuntime.make(Client.layer(connection));
@@ -23,7 +24,7 @@ try {
     ensureServer(connection, false).pipe(
       Effect.as(true),
       Effect.catchTag('PipesError', (error) =>
-        error.message === 'Pipes server is not running.'
+        error.message === 'pipes server is not running.'
           ? Effect.succeed(false)
           : Effect.fail(error),
       ),
@@ -66,7 +67,7 @@ try {
     await rmdir(configDirectory).catch(() => {});
   }
   await rm(onboardingFile, { force: true });
-  process.stdout.write(`Reset Pipes state in ${connection.directory}. No backup was created.\n`);
+  process.stdout.write(`Reset pipes state in ${connection.directory}. No backup was created.\n`);
 } finally {
   await runtime.dispose();
 }

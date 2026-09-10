@@ -11,8 +11,11 @@ https://github.com/changesets/changesets for the format):
 Short description of the change.
 ```
 
-Use `patch` for fixes, `minor` for features. `pipes` is private and never
-publishes to npm; changesets only manages the version number and
-`CHANGELOG.md`. Merging the Version Packages PR bumps the version — shipping
+Use `patch` for fixes, `minor` for features. `pipes` (in `packages/pipes`)
+is the release package: it is private and never publishes to npm.
+All workspace packages move in lockstep via the `fixed` group in
+`config.json`, so there is a single version number everywhere.
+`packages/pipes/CHANGELOG.md` carries the release notes.
+Merging the Version Packages PR bumps the version — shipping
 binaries still happens by pushing a matching tag (`git tag vX.Y.Z`), which
 triggers the release workflow.

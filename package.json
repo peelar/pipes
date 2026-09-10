@@ -1,23 +1,18 @@
 {
-  "name": "pipes",
-  "version": "0.0.1",
+  "name": "pipes-workspace",
   "private": true,
-  "bin": {
-    "pipes": "src/cli.ts",
-    "pipesd": "src/server.ts"
-  },
+  "workspaces": [
+    "packages/*"
+  ],
   "type": "module",
-  "exports": {
-    "./config": "./src/config.ts"
-  },
   "scripts": {
     "reset": "bun scripts/reset.ts",
-    "dev": "bun --watch src/dev.ts",
+    "dev": "bun --watch packages/pipes/src/dev.ts",
     "build": "bun scripts/build.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "pipes": "bun src/cli.ts",
-    "pipesd": "bun src/server.ts",
+    "pipes": "bun packages/pipes/src/cli.ts",
+    "pipesd": "bun packages/pipes/src/server.ts",
     "test": "bun test",
     "check": "vp check && tsc --noEmit && bun test",
     "typecheck": "tsc --noEmit",
@@ -25,25 +20,21 @@
     "fmt": "vp fmt",
     "postinstall": "effect-tsgo patch"
   },
-  "dependencies": {
+  "devDependencies": {
     "@agentclientprotocol/codex-acp": "1.10.0",
     "@agentclientprotocol/sdk": "1.4.0",
-    "@effect/platform-bun": "4.0.0-rc.112",
-    "@effect/sql-sqlite-bun": "4.0.0-rc.112",
-    "@opentui/core": "0.5.11",
-    "@opentui/react": "0.5.11",
-    "effect": "4.0.0-rc.112",
-    "react": "19.2.4"
-  },
-  "devDependencies": {
     "@changesets/cli": "^3.0.2",
+    "@effect/platform-bun": "4.0.0-rc.112",
     "@effect/tsgo": "0.43.0",
     "@nkzw/oxlint-config": "2.0.1",
+    "@openai/codex": "0.153.4",
     "@opentui/core-darwin-x64": "0.5.11",
     "@opentui/core-linux-arm64": "0.5.11",
     "@opentui/core-linux-x64": "0.5.11",
+    "@pipes/protocol": "workspace:*",
     "@types/bun": "latest",
     "@types/react": "latest",
+    "effect": "4.0.0-rc.112",
     "oxlint": "1.81.0",
     "typescript": "7.0.2",
     "vite-plus": "0.3.1"

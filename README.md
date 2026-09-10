@@ -1,4 +1,4 @@
-# Pipes
+# pipes
 
 ```text
 ╭───┬───╮  ╭┬─────┬╮  ╭───┬───╮  ╭───┬───╮  ╭───┬───╮
@@ -12,7 +12,13 @@
 
 A terminal-based personal software factory built to protect your attention.
 
-Pipes lets you codify how you work depending on where you work. For each repository and source of intake (GitHub, Linear, Sentry, etc.) that you maintain, define a TypeScript workflow (pipe):
+![pipes terminal UI showing the task queue, workflow steps, and task activity](docs/pipes.png)
+
+---
+
+Each source of software development tasks has its own process and definition of done. pipes lets you codify them and forward the boring work to the agents, without you babysitting them.
+
+You start by defining a TypeScript workflow (pipe):
 
 ```ts
 import { pipe } from "pipes";
@@ -38,39 +44,48 @@ export default pipe({
 });
 ```
 
+Then, you attach it to your source of intake (GitHub, Linear, Sentry, etc.):
+
+```ts
+import { pipe } from "pipes";
+
+export default pipe({
+  github: {
+    assigned_to_me: true,
+    repository: 'peelar/pipes',
+    state: 'open',
+    workflow: 'plan-implement-review',
+  },
+  ...
+});
+```
+
+and run `pipes` to start the server + TUI.
+
+After initial configuration, pipes pulls tasks from your configured sources and moves each through its assigned
+sequence of pipes. Each pipe runs a detached agent to carry out its step.
+
+You can monitor the work through TUI, jump into an agent session when you want to take the wheel, or use MCP to ask for tasks that require your attention.
+
 ## Features
 
 - A keyboard-first terminal UI with live agent messages, tool activity, and step progress.
 - Work that keeps running in the background, with tasks and history saved locally in SQLite.
-- TypeScript workflows with model, reasoning, and prompt settings for each step. Start with plan → implement → review and make it yours.
+- TypeScript workflows with model, reasoning, and prompt settings for each step.
 - Separate Git worktrees for each run, with results saved to local branches.
-- Interactive takeover: jump into a task's Codex session when you want to take the wheel.
+- Run a detached agent session or jump into a task's agent session when you want to take the wheel.
 - Work intake from connected tools: GitHub today, with more sources such as Linear and Sentry planned.
 - MCP access for delegating work from your coding agent.
-- Bundled agent adapter with guided setup — bring your own Codex CLI on PATH.
 - Planned: human review and follow-up runs before accepting finished work.
+
+> [!NOTE]
+> Currently, pipes only supports Codex as the agent and GitHub as the work intake source.
 
 ## Run
 
 Install the single binary (macOS and Linux; Windows users can use WSL).
-Requires the Codex CLI and Git.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/peelar/pipes/main/scripts/install.sh | sh
 pipes
 ```
-
-Setup walks you through connecting a repository and creating your first workflow.
-If Codex needs you to sign in, run `pipes agent login`.
-
-From a source checkout instead (requires Bun 1.4.2+):
-
-```sh
-bun install
-bun run pipes
-```
-
-Press `[n]` to add your first task, then `[s]` to start a workflow. Watch it progress, or press
-`[j]` to jump into its Codex session. When you're done watching, `[q]` closes the UI
-and leaves Pipes working. Run `bun run pipes` to return, or
-`bun run pipes shutdown` to stop the server.

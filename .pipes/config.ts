@@ -1,4 +1,10 @@
 export default {
+  github: {
+    assigned_to_me: true,
+    repository: 'peelar/pipes',
+    state: 'open',
+    workflow: 'plan-implement-review',
+  },
   workflows: {
     'plan-implement-review': {
       steps: [

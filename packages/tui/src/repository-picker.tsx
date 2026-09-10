@@ -1,0 +1,409 @@
+import { useKeyboard } from '@opentui/react';
+import { execFile } from 'node:child_process';
+import { readdir, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { basename, dirname, resolve, sep } from 'node:path';
+import { promisify } from 'node:util';
+import { useEffect, useState } from 'react';
+import { ChoiceList } from './choice-list';
+
+const exec = promisify(execFile);
+
+export function useSuggestedRoot(
+  directory: string,
+  repositories: ReadonlyArray<{ path: string }>,
+  connected: boolean,
+  visible: boolean,
+) {
+  const [root, setRoot] = useState<string>();
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void gitRoot(directory).then((value) => {
+      if (active) {
+        setRoot(value);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [directory]);
+  const suggested =
+    connected && visible && !dismissed && root && !repositories.some((repo) => repo.path === root)
+      ? root
+      : undefined;
+  return [suggested, () => setDismissed(true)] as const;
+}
+
+export function ConnectRepository({
+  busy,
+  error,
+  onConfirm,
+  onDecline,
+  path,
+}: {
+  busy: boolean;
+  error: string;
+  onConfirm: () => void;
+  onDecline: () => void;
+  path: string;
+}) {
+  useKeyboard((key) => {
+    if (busy) {
+      return;
+    }
+    if (key.name === 'y') {
+      onConfirm();
+    } else if (key.name === 'n' || key.name === 'escape') {
+      onDecline();
+    }
+  });
+  return (
+    <box
+      alignItems="center"
+      height="100%"
+      justifyContent="center"
+      left={0}
+      position="absolute"
+      top={0}
+      width="100%"
+      zIndex={10}
+    >
+      <box
+        backgroundColor="#1e1e2e"
+        border
+        borderColor="#82aaff"
+        flexDirection="column"
+        gap={1}
+        maxWidth={80}
+        padding={1}
+        title="Connect repository"
+        width="90%"
+      >
+        <text fg="#82aaff">Do you want to connect this repository in pipes?</text>
+        <text>{path}</text>
+        <text>This connects the repository locally. No repository files are changed.</text>
+        <ChoiceList
+          busy={busy}
+          onSelect={(index) => {
+            if (index === 0) {
+              onConfirm();
+            } else {
+              onDecline();
+            }
+          }}
+          options={[
+            { detail: 'Connect this repository in pipes', name: 'Yes, connect' },
+            { detail: 'Continue without connecting', name: 'No, not now' },
+          ]}
+        />
+        <text>
+          {busy ? 'Connecting…' : '[↑↓] choose · [Enter] confirm · [y] yes · [n] / [Esc] not now'}
+        </text>
+        {error && <text fg="#f38ba8">{error}</text>}
+      </box>
+    </box>
+  );
+}
+
+export async function gitRoot(path: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await exec('git', ['-C', path, 'rev-parse', '--show-toplevel'], {
+      timeout: 3000,
+    });
+    return stdout.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function expandPath(path: string, base: string) {
+  return resolve(
+    base,
+    path === '~' ? homedir() : path.startsWith('~/') ? homedir() + path.slice(1) : path,
+  );
+}
+
+export function displayPath(path: string) {
+  const home = homedir();
+  return path === home ? '~' : path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
+}
+
+export async function directories(path: string) {
+  const entries = await readdir(path, { withFileTypes: true });
+  const folders: Array<string> = [];
+  for (const entry of entries) {
+    if (entry.name === '.git') {
+      continue;
+    }
+    if (
+      entry.isDirectory() ||
+      (entry.isSymbolicLink() &&
+        (await stat(resolve(path, entry.name)).then(
+          (info) => info.isDirectory(),
+          () => false,
+        )))
+    ) {
+      folders.push(entry.name);
+    }
+  }
+  return folders.sort((a, b) => a.localeCompare(b));
+}
+
+export async function completePath(value: string, base: string) {
+  const path = expandPath(value, base);
+  const parent = value.endsWith(sep) || value === '~' || value === '' ? path : dirname(path);
+  const prefix = parent === path ? '' : basename(path);
+  const matches = (await directories(parent)).filter((name) => name.startsWith(prefix));
+  if (!matches.length) {
+    return { message: 'No matching directories.', value };
+  }
+  let common = matches[0]!;
+  for (const match of matches) {
+    while (!match.startsWith(common)) {
+      common = common.slice(0, -1);
+    }
+  }
+  return {
+    message: matches.length === 1 ? '' : matches.join('  '),
+    value: resolve(parent, common) + (matches.length === 1 ? sep : ''),
+  };
+}
+
+function ConnectionChoices({
+  busy,
+  onBrowse,
+  onGitHub,
+  onRegister,
+  ready,
+  repositories,
+  root,
+}: {
+  busy: boolean;
+  onBrowse: () => void;
+  onGitHub?: () => void;
+  onRegister: (path: string) => void;
+  ready: boolean;
+  repositories: ReadonlyArray<{ name: string; path: string }>;
+  root?: string;
+}) {
+  if (!ready) {
+    return <text fg="#f9e2af">Finding the current repository…</text>;
+  }
+  const options = [
+    ...(root ? [{ detail: displayPath(root), name: 'Connect this repository' }] : []),
+    { name: 'Browse local directories' },
+    ...(onGitHub ? [{ name: 'Clone from GitHub' }] : []),
+  ];
+  return (
+    <box flexDirection="column" gap={1}>
+      {repositories.length > 0 && (
+        <box flexDirection="column">
+          <text fg="#a6adc8">Repositories</text>
+          {repositories.map((repository) => (
+            <text key={repository.path} wrapMode="none">
+              <span fg="#a6e3a1">● </span>
+              {repository.name}
+              <span fg="#a6adc8">{`  ${displayPath(repository.path)}`}</span>
+            </text>
+          ))}
+        </box>
+      )}
+      <box flexDirection="column">
+        <text>Add a repository</text>
+        <ChoiceList
+          busy={busy}
+          onSelect={(selected) => {
+            if (root && selected === 0) {
+              onRegister(root);
+            } else if (selected === (root ? 1 : 0)) {
+              onBrowse();
+            } else {
+              onGitHub?.();
+            }
+          }}
+          options={options}
+        />
+        <text fg="#a6adc8">[↑↓] choose · [Enter] select</text>
+      </box>
+    </box>
+  );
+}
+
+function connectionHeight(
+  browsing: boolean,
+  repositories: ReadonlyArray<unknown>,
+  root: string | undefined,
+  remote: boolean,
+) {
+  if (browsing) {
+    return 10;
+  }
+  const choices = (root ? 1 : 0) + 1 + (remote ? 1 : 0);
+  const connected = repositories.length > 0 ? repositories.length + 6 : 4;
+  return choices + connected;
+}
+
+export function RepositoryPicker({
+  busy,
+  onGitHub,
+  onRegister,
+  repositories = [],
+  startDirectory,
+}: {
+  busy: boolean;
+  onGitHub?: () => void;
+  onRegister: (path: string) => void;
+  repositories?: ReadonlyArray<{ name: string; path: string }>;
+  startDirectory: string;
+}) {
+  const [directory, setDirectory] = useState(startDirectory);
+  const [browsing, setBrowsing] = useState(false);
+  const [listing, setListing] = useState<{ folders: Array<string>; path: string; root?: string }>();
+  const [editing, setEditing] = useState(false);
+  const [path, setPath] = useState('');
+  const [message, setMessage] = useState('');
+  const ready = listing?.path === directory;
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([directories(directory), gitRoot(directory)])
+      .then(([folders, root]) => {
+        if (active) {
+          setListing({ folders, path: directory, root });
+          setMessage('');
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setMessage(String(error));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [directory]);
+
+  useKeyboard((key) => {
+    if (busy) {
+      return;
+    }
+    if (editing) {
+      if ((key.name === 'tab' && !onGitHub) || (key.ctrl && key.name === 'e')) {
+        key.preventDefault();
+        void completePath(path, directory)
+          .then((result) => {
+            setPath(result.value);
+            setMessage(result.message);
+          })
+          .catch((error: unknown) => setMessage(String(error)));
+      }
+    } else if (browsing && key.name === 'p') {
+      setPath('');
+      setEditing(true);
+    } else if (browsing && key.name === 'left') {
+      setDirectory(dirname(directory));
+    }
+  });
+
+  const browseOptions = [
+    ...(ready &&
+    listing.root &&
+    (onGitHub || !repositories.some((repository) => repository.path === listing.root))
+      ? [
+          {
+            action: 'register' as const,
+            description: '',
+            name: 'Connect this repository',
+            value: listing.root,
+          },
+        ]
+      : []),
+    {
+      action: 'browse' as const,
+      description: '',
+      name: '..',
+      value: dirname(directory),
+    },
+    ...(ready
+      ? listing.folders.map((name) => ({
+          action: 'browse' as const,
+          description: '',
+          name: `${name}/`,
+          value: resolve(directory, name),
+        }))
+      : []),
+    ...repositories.map((repository) => ({
+      action: 'browse' as const,
+      description: repository.path,
+      name: `Connected: ${repository.name}`,
+      value: repository.path,
+    })),
+  ];
+
+  return (
+    <box
+      flexDirection="column"
+      flexShrink={0}
+      height={connectionHeight(browsing, repositories, listing?.root, onGitHub !== undefined)}
+    >
+      {browsing && <text fg="#a6adc8">{directory}</text>}
+      {browsing && (
+        <text fg="#a6e3a1">
+          {ready
+            ? listing.root
+              ? 'Git repository'
+              : 'Not a Git repository'
+            : 'Reading directory…'}
+        </text>
+      )}
+      {!browsing ? (
+        <ConnectionChoices
+          busy={busy}
+          onBrowse={() => setBrowsing(true)}
+          onGitHub={onGitHub}
+          onRegister={onRegister}
+          ready={ready}
+          repositories={repositories}
+          root={listing?.root}
+        />
+      ) : editing ? (
+        <input
+          focused={!busy}
+          onInput={setPath}
+          onSubmit={(value) => {
+            if (!busy && typeof value === 'string') {
+              setDirectory(expandPath(value, directory));
+              setEditing(false);
+            }
+          }}
+          placeholder="Path (relative to displayed directory) · [Ctrl+e] completes · [Enter] opens"
+          value={path}
+        />
+      ) : ready ? (
+        <ChoiceList
+          busy={busy}
+          key={`${directory}:${ready}`}
+          maxVisible={6}
+          onSelect={(index) => {
+            const option = browseOptions[index];
+            if (!option || busy) {
+              return;
+            }
+            if (option.action === 'register') {
+              onRegister(option.value);
+            } else {
+              setDirectory(option.value);
+            }
+          }}
+          options={browseOptions.map((option) => ({
+            detail: option.description || undefined,
+            name: option.name,
+          }))}
+        />
+      ) : null}
+      {browsing && !editing && <text fg="#a6adc8">[←] parent · [p] type a path</text>}
+      {message && <text fg="#f9e2af">{message}</text>}
+    </box>
+  );
+}

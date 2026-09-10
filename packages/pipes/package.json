@@ -1,0 +1,27 @@
+{
+  "name": "pipes",
+  "version": "0.0.1",
+  "private": true,
+  "bin": {
+    "pipes": "src/cli.ts",
+    "pipesd": "src/server.ts"
+  },
+  "type": "module",
+  "exports": {
+    "./config": "./src/config.ts"
+  },
+  "dependencies": {
+    "@agentclientprotocol/codex-acp": "1.10.0",
+    "@agentclientprotocol/sdk": "1.4.0",
+    "@effect/platform-bun": "4.0.0-rc.112",
+    "@effect/sql-sqlite-bun": "4.0.0-rc.112",
+    "@opentui/core": "0.5.11",
+    "@opentui/react": "0.5.11",
+    "@pipes/mcp": "workspace:*",
+    "@pipes/protocol": "workspace:*",
+    "@pipes/server": "workspace:*",
+    "@pipes/tui": "workspace:*",
+    "effect": "4.0.0-rc.112",
+    "react": "19.2.4"
+  }
+}
