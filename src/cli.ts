@@ -20,6 +20,7 @@ import {
 import { config } from './cli/config';
 import { connection } from './cli/connection';
 import { mcp } from './cli/mcp';
+import { upgrade } from './cli/upgrade';
 import { PipesError } from './protocol/pipes';
 import { ObservabilityLayer } from './observability';
 import { version } from './version';
@@ -52,7 +53,7 @@ Command.make(
     submit,
     list,
     Command.make('mcp', {}, mcp).pipe(
-      Command.withDescription('Run the Pipes MCP server over stdio'),
+      Command.withDescription('Run the pipes MCP server over stdio'),
     ),
     start,
     stop,
@@ -61,6 +62,7 @@ Command.make(
     jumpIn,
     handoffClose,
     shutdown,
+    upgrade,
   ]),
   Command.run({ version }),
   Effect.provide([Client.layer(connection), BunServices.layer, ObservabilityLayer]),

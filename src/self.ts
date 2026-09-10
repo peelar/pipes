@@ -19,3 +19,6 @@ export const selfCommand = (args: ReadonlyArray<string>) => ({
   args: [...entryPrefix, ...args],
   executable: process.execPath,
 });
+
+/** True when running from a source checkout instead of a compiled binary. */
+export const isSourceCheckout = entryPrefix.length > 0;
