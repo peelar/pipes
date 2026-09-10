@@ -7,6 +7,8 @@ import { PipesError, Repository, type Client } from '@pipes/protocol';
 import { RepositoryConnection } from './repository-connection';
 import { press as pressView, stubClient } from './test-helpers';
 
+const open = process.platform === 'darwin' ? 'open' : 'xdg-open';
+
 test('connection UI offers local remotes, signs in, selects workflows, and lists remote repositories', async () => {
   const repository = new Repository({ id: 'repo', name: 'repo', path: tmpdir() });
   const attached: Array<{ path: string; repository: string; workflow: string }> = [];
@@ -117,14 +119,14 @@ test('connection UI offers local remotes, signs in, selects workflows, and lists
     } as ReturnType<typeof Bun.spawn>);
     await press('RETURN');
     expect(loginSpawn).toHaveBeenCalledWith([
-      'open',
+      open,
       'https://github.com/apps/pipes-github/installations/new',
     ]);
     expect(view.captureCharFrame()).toContain(
       'Choose the GitHub account and repositories pipes may access.',
     );
     await press('RETURN');
-    expect(loginSpawn).toHaveBeenCalledWith(['open', 'https://github.com/login/device']);
+    expect(loginSpawn).toHaveBeenCalledWith([open, 'https://github.com/login/device']);
     expect(view.captureCharFrame()).toContain('ABCD-1234');
     expect(view.captureCharFrame()).toContain('Waiting for GitHub approval…');
     await act(async () => {
@@ -173,14 +175,14 @@ test('connection UI offers local remotes, signs in, selects workflows, and lists
     try {
       await press('RETURN');
       expect(spawn).toHaveBeenCalledWith([
-        'open',
+        open,
         'https://github.com/apps/pipes-github/installations/new',
       ]);
       expect(view.captureCharFrame()).toContain(
         'Choose the GitHub account and repositories pipes may access.',
       );
       await press('RETURN');
-      expect(spawn).toHaveBeenCalledWith(['open', 'https://github.com/login/device']);
+      expect(spawn).toHaveBeenCalledWith([open, 'https://github.com/login/device']);
       expect(view.captureCharFrame()).toContain('ABCD-1234');
       expect(view.captureCharFrame()).toContain('Waiting for GitHub approval…');
       listingFails = false;

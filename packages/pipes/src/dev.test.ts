@@ -37,7 +37,7 @@ test('dev applies pending migrations before opening the TUI on startup and watch
       ...packageNames.map((name) => resolve('packages', name, 'node_modules')),
     ]) {
       for (const entry of await readdir(dependencyRoot)) {
-        if (entry === '.bin' || entry === '.bun') {
+        if (entry.startsWith('.')) {
           continue;
         }
         if (!entry.startsWith('@')) {
