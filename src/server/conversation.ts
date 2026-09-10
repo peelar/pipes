@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
 import { readFile } from 'node:fs/promises';
-import { PipesError, type Run } from '../protocol/pipes';
+import { PipesError, type Run } from '@pipes/protocol';
 
 const Entry = Schema.Struct({
   prompt: Schema.optionalKey(Schema.String),

@@ -11,6 +11,9 @@
         "@effect/sql-sqlite-bun": "4.0.0-rc.112",
         "@opentui/core": "0.5.11",
         "@opentui/react": "0.5.11",
+        "@pipes/mcp": "workspace:*",
+        "@pipes/protocol": "workspace:*",
+        "@pipes/tui": "workspace:*",
         "effect": "4.0.0-rc.112",
         "react": "19.2.4",
       },
@@ -18,6 +21,7 @@
         "@changesets/cli": "^3.0.2",
         "@effect/tsgo": "0.43.0",
         "@nkzw/oxlint-config": "2.0.1",
+        "@openai/codex": "0.153.4",
         "@opentui/core-darwin-x64": "0.5.11",
         "@opentui/core-linux-arm64": "0.5.11",
         "@opentui/core-linux-x64": "0.5.11",
@@ -26,6 +30,32 @@
         "oxlint": "1.81.0",
         "typescript": "7.0.2",
         "vite-plus": "0.3.1",
+      },
+    },
+    "packages/mcp": {
+      "name": "@pipes/mcp",
+      "version": "0.0.1",
+      "dependencies": {
+        "@pipes/protocol": "workspace:*",
+        "effect": "4.0.0-rc.112",
+      },
+    },
+    "packages/protocol": {
+      "name": "@pipes/protocol",
+      "version": "0.0.1",
+      "dependencies": {
+        "effect": "4.0.0-rc.112",
+      },
+    },
+    "packages/tui": {
+      "name": "@pipes/tui",
+      "version": "0.0.1",
+      "dependencies": {
+        "@opentui/core": "0.5.11",
+        "@opentui/react": "0.5.11",
+        "@pipes/protocol": "workspace:*",
+        "effect": "4.0.0-rc.112",
+        "react": "19.2.4",
       },
     },
   },
@@ -281,6 +311,12 @@
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.81.0", "", { "os": "win32", "cpu": "x64" }, "sha512-IZuUCwGw9emG5JtCp+fYGB+Z4OWEoeEcM8R5BA1pYw63/ieYFVdcU2ylxTpHbVHSenZnsYE+ZZ20uHAJszQ4cA=="],
 
     "@oxlint/plugins": ["@oxlint/plugins@1.79.0", "", {}, "sha512-S0uyoxakDINJ4DPgqxGlEEvrdSMeQb7Z2lKVjxoY2gwsbZbfg2Xr8Klfeo5ZeraHmmdBCELFUHkSe6KEmBpMvg=="],
+
+    "@pipes/mcp": ["@pipes/mcp@workspace:packages/mcp"],
+
+    "@pipes/protocol": ["@pipes/protocol@workspace:packages/protocol"],
+
+    "@pipes/tui": ["@pipes/tui@workspace:packages/tui"],
 
     "@pnpm/deps.graph-sequencer": ["@pnpm/deps.graph-sequencer@1100.0.1", "", {}, "sha512-pOr5+q1fLYKwFN3LAJuGZEnfXDcQ73zqgDHMtGy+K+uIoUqyY+6MeDCWFwfu+4EFuq76I5EPFofoNAI+Bmmq4A=="],
 

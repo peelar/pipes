@@ -1,7 +1,7 @@
 import { Effect, type ManagedRuntime } from 'effect';
 import { useEffect, useState } from 'react';
-import { Client } from '../client/connection';
-import { type GitHubLogin } from '../protocol/pipes';
+import { Client } from '@pipes/protocol';
+import { type GitHubLogin } from '@pipes/protocol';
 
 export const installationUrl = 'https://github.com/apps/pipes-github/installations/new';
 

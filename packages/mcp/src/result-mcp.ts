@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { StepResult } from '../protocol/pipes';
+import { StepResult } from '@pipes/protocol';
 
 const Request = Schema.Struct({
   id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite, Schema.Null])),

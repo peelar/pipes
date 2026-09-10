@@ -4,7 +4,7 @@ import { Deferred, Effect, Layer, ManagedRuntime, Stream } from 'effect';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Run } from '../protocol/pipes';
+import { Run } from '@pipes/protocol';
 import { Environment } from './environment';
 import { Execution } from './execution';
 import { Store } from './store';

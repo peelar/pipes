@@ -2,8 +2,8 @@ import { Console, Effect, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { resolve } from 'node:path';
-import { AgentCommand } from '../config';
-import { PipesError } from '../protocol/pipes';
+import { AgentCommand } from '@pipes/protocol';
+import { PipesError } from '@pipes/protocol';
 import { selfCommand } from '../self';
 import { connect } from './connection';
 

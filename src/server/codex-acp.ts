@@ -11,7 +11,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { CodexProbe, CodexSettings, PipesError } from '../protocol/pipes';
+import { CodexProbe, CodexSettings, PipesError } from '@pipes/protocol';
 import { selfCommand } from '../self';
 import { version } from '../version';
 

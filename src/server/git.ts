@@ -3,7 +3,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { PipesError, type Run } from '../protocol/pipes';
+import { PipesError, type Run } from '@pipes/protocol';
 import { failure } from './errors';
 
 type Spawner = ChildProcessSpawner.ChildProcessSpawner['Service'];

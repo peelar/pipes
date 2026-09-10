@@ -3,8 +3,8 @@ import { Argument, Command } from 'effect/unstable/cli';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { decodeConfig } from '../config';
-import { PipesError } from '../protocol/pipes';
+import { decodeConfig } from '@pipes/protocol';
+import { PipesError } from '@pipes/protocol';
 
 export const config = Command.make(
   'config',

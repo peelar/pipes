@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
-import { Agent, AgentCommand, Config, GitHubPolicy, GitHubRepository } from '../config';
+import { Agent, AgentCommand, Config, GitHubPolicy, GitHubRepository } from './config';
 import { ExecutionStatus } from './execution-state';
 
 export const GitHubConnection = Schema.Struct({

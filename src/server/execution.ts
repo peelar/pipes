@@ -1,5 +1,5 @@
 import { Context, Effect, Fiber, Layer, Schema, Semaphore } from 'effect';
-import { PipesError, Run, StepResult } from '../protocol/pipes';
+import { PipesError, Run, StepResult } from '@pipes/protocol';
 import { Environment } from './environment';
 import { failure } from './errors';
 import { Store } from './store';

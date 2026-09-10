@@ -6,6 +6,9 @@
     "pipes": "src/cli.ts",
     "pipesd": "src/server.ts"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "type": "module",
   "exports": {
     "./config": "./src/config.ts"
@@ -32,6 +35,9 @@
     "@effect/sql-sqlite-bun": "4.0.0-rc.112",
     "@opentui/core": "0.5.11",
     "@opentui/react": "0.5.11",
+    "@pipes/mcp": "workspace:*",
+    "@pipes/protocol": "workspace:*",
+    "@pipes/tui": "workspace:*",
     "effect": "4.0.0-rc.112",
     "react": "19.2.4"
   },
@@ -39,6 +45,7 @@
     "@changesets/cli": "^3.0.2",
     "@effect/tsgo": "0.43.0",
     "@nkzw/oxlint-config": "2.0.1",
+    "@openai/codex": "0.153.4",
     "@opentui/core-darwin-x64": "0.5.11",
     "@opentui/core-linux-arm64": "0.5.11",
     "@opentui/core-linux-x64": "0.5.11",

@@ -2,8 +2,8 @@ import { RGBA, SyntaxStyle } from '@opentui/core';
 import { useKeyboard } from '@opentui/react';
 import { Effect, type ManagedRuntime } from 'effect';
 import { useEffect, useEffectEvent, useReducer } from 'react';
-import { Client } from '../client/connection';
-import { type CodexSettings } from '../protocol/pipes';
+import { Client } from '@pipes/protocol';
+import { type CodexSettings } from '@pipes/protocol';
 
 const syntaxStyle = SyntaxStyle.fromStyles({
   default: { fg: RGBA.fromHex('#cdd6f4') },

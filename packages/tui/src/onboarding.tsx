@@ -2,7 +2,7 @@ import { Schema, type ManagedRuntime } from 'effect';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { useState } from 'react';
-import { Client } from '../client/connection';
+import { Client } from '@pipes/protocol';
 import { CodexSetup } from './codex-setup';
 import { RepositoryConnection } from './repository-connection';
 

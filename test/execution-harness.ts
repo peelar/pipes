@@ -4,8 +4,7 @@ import { Effect, ManagedRuntime, Stream } from 'effect';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Client } from '../src/client/connection';
-import { Run, type Task } from '../src/protocol/pipes';
+import { Client, Run, type Task } from '@pipes/protocol';
 import { serve } from '../src/server';
 import { writeCodexFixture } from './codex-fixture';
 

@@ -1,8 +1,8 @@
 import { Effect } from 'effect';
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PipesError, Run, StepResult } from '../../protocol/pipes';
-import { nextExecutionState } from '../../protocol/execution-state';
+import { PipesError, Run, StepResult } from '@pipes/protocol';
+import { nextExecutionState } from '@pipes/protocol';
 import { failure } from '../errors';
 import type { ExecutionContext } from './context';
 import { stop } from './engine';

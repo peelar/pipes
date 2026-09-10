@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { writeCodexFixture } from '../../test/codex-fixture';
-import { decodeConfig } from '../config';
+import { decodeConfig } from '@pipes/protocol';
 import {
   checkCodexConfig,
   codexMcpInstalled,

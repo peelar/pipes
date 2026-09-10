@@ -1,24 +1,24 @@
-import { createCliRenderer, type TextareaRenderable } from '@opentui/core';
-import { BunServices } from '@effect/platform-bun';
-import { createRoot, useKeyboard } from '@opentui/react';
-import { Effect, Layer, ManagedRuntime, Stream } from 'effect';
+import { type TextareaRenderable } from '@opentui/core';
+import { useKeyboard } from '@opentui/react';
+import { Effect, ManagedRuntime, Stream } from 'effect';
 import { useEffect, useRef, useState } from 'react';
-import { Client, type Connection } from '../client/connection';
-import { ObservabilityLayer } from '../observability';
-import { PipesError, type Repository, type Run, Snapshot, type Task } from '../protocol/pipes';
+import {
+  Client,
+  PipesError,
+  taskActions,
+  type Repository,
+  type Run,
+  Snapshot,
+  type Task,
+} from '@pipes/protocol';
 import { ConnectRepository, useSuggestedRoot } from './repository-picker';
 import { RepositoryConnection } from './repository-connection';
-import { claimWelcome, Welcome } from './welcome';
 import { Onboarding, readOnboarding } from './onboarding';
 import { CodexSetup } from './codex-setup';
-import { taskActions } from '../protocol/execution-state';
 import { Conversation } from './conversation';
-import { jumpIn } from '../client/jump-in';
 import { ConfirmationAlert, type DestructiveAction } from './confirmation-alert';
 
-type Runtime = ReturnType<typeof makeRuntime>;
-const makeRuntime = (connection: Connection) =>
-  ManagedRuntime.make(Client.layer(connection).pipe(Layer.provide(ObservabilityLayer)));
+export type Runtime = ManagedRuntime.ManagedRuntime<Client, never>;
 const empty = new Snapshot({ repositories: [], tasks: [], transitions: [] });
 
 function paneFocused(mode: string, pane: string, target: string, modal: unknown) {
@@ -647,42 +647,4 @@ export function App({
       )}
     </box>
   );
-}
-
-export async function launch(connection: Connection, signal?: AbortSignal) {
-  const runtime = makeRuntime(connection);
-  const { promise: closed, resolve: finish } = Promise.withResolvers<void>();
-  const renderer = await createCliRenderer({ exitOnCtrlC: true, onDestroy: () => finish() });
-  const abort = () => renderer.destroy();
-  signal?.addEventListener('abort', abort, { once: true });
-  const root = createRoot(renderer);
-  const firstLaunch = claimWelcome(connection.directory);
-  try {
-    if (signal?.aborted) {
-      return;
-    }
-    root.render(
-      <Welcome firstLaunch={firstLaunch}>
-        <App
-          onboardingDirectory={connection.directory}
-          onJumpIn={async (taskId) => {
-            renderer.suspend();
-            try {
-              await runtime.runPromise(jumpIn(taskId).pipe(Effect.provide(BunServices.layer)));
-            } finally {
-              renderer.resume();
-            }
-          }}
-          onQuit={() => renderer.destroy()}
-          runtime={runtime}
-        />
-      </Welcome>,
-    );
-    await closed;
-  } finally {
-    signal?.removeEventListener('abort', abort);
-    root.unmount();
-    renderer.destroy();
-    await runtime.dispose();
-  }
 }

@@ -13,9 +13,9 @@ import {
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { act, useState } from 'react';
-import { writeCodexFixture } from '../../test/codex-fixture';
-import { Client, requireSupportedBun } from '../client/connection';
-import { Repository, Run, Snapshot, Task } from '../protocol/pipes';
+import { writeCodexFixture } from '../../../test/codex-fixture';
+import { Client, requireSupportedBun } from '@pipes/protocol';
+import { Repository, Run, Snapshot, Task } from '@pipes/protocol';
 import { App, StatusText, statusVisuals, TaskDetails, workflowProgress } from './app';
 import { CodexSetup } from './codex-setup';
 import { readOnboarding } from './onboarding';

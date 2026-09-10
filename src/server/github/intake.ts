@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
-import type { Config } from '../../config';
-import { PipesError, type Repository } from '../../protocol/pipes';
+import type { Config } from '@pipes/protocol';
+import { PipesError, type Repository } from '@pipes/protocol';
 import { get, identity, requestError } from './auth';
 import type { GitHubContext } from './context';
 import { policyFor } from './repos';

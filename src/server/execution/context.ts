@@ -1,6 +1,6 @@
 import type { Context, Fiber, Scope, Semaphore } from 'effect';
 import type { Environment } from '../environment';
-import type { Run } from '../../protocol/pipes';
+import type { Run } from '@pipes/protocol';
 import type { Store } from '../store';
 
 export interface ExecutionContext {

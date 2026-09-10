@@ -3,16 +3,8 @@ import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'nod
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { selfCommand } from '../self';
-import { Context, Effect, Layer, Schema } from 'effect';
-import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/unstable/http';
-import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
-import { PipesError, PipesRpcs } from '../protocol/pipes';
-
-export function requireSupportedBun(version = Bun.version) {
-  if (!Bun.semver?.satisfies(version, '>=1.4.2')) {
-    throw new Error(`pipes requires Bun 1.4.2 or newer; found ${version}. Run bun upgrade.`);
-  }
-}
+import { PipesError, requireSupportedBun, type Connection } from '@pipes/protocol';
+import { Effect, Schema } from 'effect';
 
 export const settings = () => {
   requireSupportedBun();
@@ -38,8 +30,6 @@ export const settings = () => {
     url: `http://127.0.0.1:${port}`,
   };
 };
-
-export type Connection = ReturnType<typeof settings>;
 
 export const ensureServer = Effect.fn('ensureServer')(function* (
   connection: Connection,
@@ -107,23 +97,3 @@ export const ensureServer = Effect.fn('ensureServer')(function* (
     message: `Server did not start. See ${join(connection.directory, 'server.log')}`,
   });
 });
-
-const makeClient = RpcClient.make(PipesRpcs);
-export class Client extends Context.Service<Client, Effect.Success<typeof makeClient>>()(
-  'pipes/Client',
-) {
-  static layer = (connection: Connection) =>
-    Layer.effect(Client, makeClient).pipe(
-      Layer.provide(
-        RpcClient.layerProtocolHttp({
-          transformClient: (client) =>
-            HttpClient.mapRequest(
-              client,
-              HttpClientRequest.setHeader('Authorization', `Bearer ${connection.token}`),
-            ),
-          url: `${connection.url}/rpc`,
-        }),
-      ),
-      Layer.provide([FetchHttpClient.layer, RpcSerialization.layerNdjson]),
-    );
-}

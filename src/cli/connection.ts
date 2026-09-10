@@ -1,5 +1,6 @@
 import { Effect } from 'effect';
-import { Client, ensureServer, settings } from '../client/connection';
+import { ensureServer, settings } from '../client/connection';
+import { Client } from '@pipes/protocol';
 
 export const connection = settings();
 

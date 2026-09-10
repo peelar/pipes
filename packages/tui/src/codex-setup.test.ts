@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { CodexSettings } from '../protocol/pipes';
+import { CodexSettings } from '@pipes/protocol';
 import { transitionSetup } from './codex-setup';
 
 test('setup guards pending actions and recovers through retry before creation', () => {

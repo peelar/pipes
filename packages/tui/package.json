@@ -1,0 +1,16 @@
+{
+  "name": "@pipes/tui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opentui/core": "0.5.11",
+    "@opentui/react": "0.5.11",
+    "@pipes/protocol": "workspace:*",
+    "effect": "4.0.0-rc.112",
+    "react": "19.2.4"
+  }
+}

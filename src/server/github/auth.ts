@@ -1,7 +1,7 @@
 import { Effect, Schema } from 'effect';
 import { HttpBody, HttpClientResponse } from 'effect/unstable/http';
 import { readFile, writeFile } from 'node:fs/promises';
-import { PipesError } from '../../protocol/pipes';
+import { PipesError } from '@pipes/protocol';
 import type { GitHubContext } from './context';
 import { DeviceAuthorization, OAuthError, OAuthToken, SavedCredential } from './schemas';
 

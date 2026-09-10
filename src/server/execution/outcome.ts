@@ -1,7 +1,7 @@
 import type { Cause } from 'effect';
 import { Cause as CauseModule } from 'effect';
 import { transition } from './transitions';
-import type { Run } from '../../protocol/pipes';
+import type { Run } from '@pipes/protocol';
 
 export function applyFailureCause(run: Run, cause: Cause.Cause<unknown>, cancelled: boolean): Run {
   const interrupted = CauseModule.hasInterrupts(cause);

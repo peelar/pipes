@@ -74,6 +74,8 @@ test('interactive handoff claims steps, records outcomes, and survives restarts'
       '--cd',
       owned.workspace,
     ]);
+    // Bun resolves the `codex` script through the root node_modules/.bin link,
+    // pinned as an explicit devDependency so hoisting cannot drop it.
     const nativeHelp = Bun.spawn([process.execPath, args[0]!, 'resume', '--help'], {
       stderr: 'pipe',
       stdout: 'pipe',

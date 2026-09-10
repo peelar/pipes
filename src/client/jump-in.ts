@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
-import { Client } from './connection';
-import { PipesError } from '../protocol/pipes';
+import { Client } from '@pipes/protocol';
+import { PipesError } from '@pipes/protocol';
 import { Environment } from '../server/environment';
 
 export const jumpIn = Effect.fn('jumpIn')(

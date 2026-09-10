@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test';
 import { testRender } from '@opentui/react/test-utils';
 import { Effect, Layer, ManagedRuntime, Stream } from 'effect';
 import { act } from 'react';
-import { Client } from '../client/connection';
-import { Run, Snapshot } from '../protocol/pipes';
+import { Client } from '@pipes/protocol';
+import { Run, Snapshot } from '@pipes/protocol';
 import { App } from './app';
 
 test('selected task actions follow execution state and inspection captures keyboard input', async () => {

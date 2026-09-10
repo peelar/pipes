@@ -1,11 +1,12 @@
 import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Effect, Logger } from 'effect';
 import { join } from 'node:path';
-import { Client, ensureServer, settings, type Connection } from './client/connection';
+import { ensureServer, settings } from './client/connection';
+import { Client, type Connection } from '@pipes/protocol';
 import { ObservabilityLayer } from './observability';
-import { PipesError } from './protocol/pipes';
+import { PipesError } from '@pipes/protocol';
 import { serve } from './server';
-import { launch } from './tui/app';
+import { launch } from './launch';
 
 const running = (connection: Connection) =>
   ensureServer(connection, false).pipe(

@@ -3,8 +3,8 @@ import { testRender } from '@opentui/react/test-utils';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { tmpdir } from 'node:os';
 import { act } from 'react';
-import { Client } from '../client/connection';
-import { PipesError, Repository } from '../protocol/pipes';
+import { Client } from '@pipes/protocol';
+import { PipesError, Repository } from '@pipes/protocol';
 import { RepositoryConnection } from './repository-connection';
 
 test('connection UI offers local remotes, signs in, selects workflows, and lists remote repositories', async () => {

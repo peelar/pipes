@@ -1,4 +1,4 @@
-import type { Run } from '../../protocol/pipes';
+import type { Run } from '@pipes/protocol';
 
 export function buildStepPrompt(
   run: Run,

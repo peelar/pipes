@@ -1,7 +1,7 @@
 import { useKeyboard } from '@opentui/react';
 import { Effect, Schedule } from 'effect';
 import { useEffect, useState, type ComponentProps } from 'react';
-import { Client } from '../client/connection';
+import { Client } from '@pipes/protocol';
 import type { App } from './app';
 
 export function Conversation({

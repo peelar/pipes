@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { expect, test } from 'bun:test';
 import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer, ManagedRuntime, Queue, Stream } from 'effect';
-import { type Snapshot } from '../protocol/pipes';
+import { type Snapshot } from '@pipes/protocol';
 import { Store } from './store';
 
 test('watch emits initially and after writes, stays idle otherwise, and supports new observers', async () => {

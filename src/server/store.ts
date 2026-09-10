@@ -3,7 +3,7 @@ import { Context, DateTime, Effect, Layer, PubSub, Schema, Stream } from 'effect
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { SqlClient } from 'effect/unstable/sql';
 import { basename, dirname } from 'node:path';
-import { PipesError, Repository, Run, Snapshot, Task, TaskSubmission } from '../protocol/pipes';
+import { PipesError, Repository, Run, Snapshot, Task, TaskSubmission } from '@pipes/protocol';
 
 const databaseError = () =>
   new PipesError({ message: 'Database operation failed; see server.log.' });

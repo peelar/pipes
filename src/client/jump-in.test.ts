@@ -2,9 +2,9 @@ import { expect, test } from 'bun:test';
 import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { Client } from './connection';
+import { Client } from '@pipes/protocol';
 import { jumpIn } from './jump-in';
-import { Run } from '../protocol/pipes';
+import { Run } from '@pipes/protocol';
 
 test('native handoff inherits the terminal and closes ownership only after the child stops', async () => {
   const descriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');

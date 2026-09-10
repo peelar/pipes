@@ -3,7 +3,8 @@ import { Effect, ManagedRuntime } from 'effect';
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Client, ensureServer } from './client/connection';
+import { ensureServer } from './client/connection';
+import { Client } from '@pipes/protocol';
 
 test('dev applies pending migrations before opening the TUI on startup and watch reload, preserving the queue', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'pipes-dev-'));
@@ -37,7 +38,7 @@ test('dev applies pending migrations before opening the TUI on startup and watch
     );
     const before = await runtime.runPromise(client.snapshot());
     const serverPath = join(directory, 'src/server.ts');
-    const uiPath = join(directory, 'src/tui/app.tsx');
+    const uiPath = join(directory, 'src/launch.tsx');
     const serverSource = await readFile(serverPath, 'utf8');
     const uiSource = await readFile(uiPath, 'utf8');
     await writeFile(serverPath, `${serverSource}\nexport const reloadMarker = 1;\n`);
@@ -64,7 +65,7 @@ import { Effect } from 'effect';
 import { writeFileSync } from 'node:fs';
 import { develop } from './src/dev';
 import { reloadMarker as server } from './src/server';
-import { reloadMarker as ui } from './src/tui/app';
+import { reloadMarker as ui } from './src/launch';
 develop(${JSON.stringify(connection)}, async (_, signal) => {
   const database = new Database(${JSON.stringify(join(directory, 'pipes.sqlite'))}, { readonly: true });
   const migrations = database.query("SELECT name FROM sqlite_master WHERE name LIKE 'dev_migration_%'").all().length;

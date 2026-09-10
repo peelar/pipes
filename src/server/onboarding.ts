@@ -4,8 +4,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import skillText from '../../skills/pipes/SKILL.md' with { type: 'text' };
-import { Agent, decodeConfig } from '../config';
-import { PipesError } from '../protocol/pipes';
+import { Agent, decodeConfig } from '@pipes/protocol';
+import { PipesError } from '@pipes/protocol';
 import { selfCommand } from '../self';
 import { acpError, codexMcp, codexMcpInstalled, codexSkillPath, probeCodex } from './codex-acp';
 

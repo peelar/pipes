@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Config } from '../../config';
-import { Brief, Title } from '../../protocol/pipes';
+import type { Config } from '@pipes/protocol';
+import { Brief, Title } from '@pipes/protocol';
 
 export const GitHubIssue = Schema.Struct({
   assignees: Schema.Array(Schema.Struct({ id: Schema.Int })),

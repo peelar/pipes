@@ -1,6 +1,6 @@
 import { DateTime, Effect } from 'effect';
-import { PipesError, Run } from '../../protocol/pipes';
-import { nextExecutionState } from '../../protocol/execution-state';
+import { PipesError, Run } from '@pipes/protocol';
+import { nextExecutionState } from '@pipes/protocol';
 import type { ExecutionContext } from './context';
 import { launch, stop } from './engine';
 import { currentRun, transition } from './transitions';

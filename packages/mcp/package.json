@@ -1,0 +1,13 @@
+{
+  "name": "@pipes/mcp",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@pipes/protocol": "workspace:*",
+    "effect": "4.0.0-rc.112"
+  }
+}

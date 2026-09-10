@@ -1,8 +1,8 @@
 import { useKeyboard } from '@opentui/react';
 import { Effect, type ManagedRuntime } from 'effect';
 import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react';
-import { Client } from '../client/connection';
-import { type GitHubConnection, type GitHubLogin, type Repository } from '../protocol/pipes';
+import { Client } from '@pipes/protocol';
+import { type GitHubConnection, type GitHubLogin, type Repository } from '@pipes/protocol';
 import { CodexSetup } from './codex-setup';
 import { installationUrl, openBrowser, RemoteRepositories } from './remote-repositories';
 import { RepositoryPicker } from './repository-picker';

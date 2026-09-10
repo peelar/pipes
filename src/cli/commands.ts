@@ -1,8 +1,9 @@
 import { Console, Effect } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { resolve } from 'node:path';
-import { Client, ensureServer } from '../client/connection';
-import { Brief, PipesError, Title } from '../protocol/pipes';
+import { ensureServer } from '../client/connection';
+import { Client } from '@pipes/protocol';
+import { Brief, PipesError, Title } from '@pipes/protocol';
 import { jumpIn as resumeTask } from '../client/jump-in';
 import { connect, connection } from './connection';
 

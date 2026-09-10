@@ -1,7 +1,7 @@
 import { Effect, Fiber } from 'effect';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Attempt, PipesError, type Run } from '../../protocol/pipes';
+import { Attempt, PipesError, type Run } from '@pipes/protocol';
 import { failure } from '../errors';
 import type { ExecutionContext } from './context';
 import { applyFailureCause } from './outcome';

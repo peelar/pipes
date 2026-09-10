@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Effect } from 'effect';
-import { Repository, Run, Snapshot, Task } from '../protocol/pipes';
+import { Repository, Run, Snapshot, Task } from '@pipes/protocol';
 import { mcpMessage } from './mcp';
 
 const repository = new Repository({ id: 'repo', name: 'pipes', path: '/code/pipes' });

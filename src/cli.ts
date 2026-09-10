@@ -2,7 +2,8 @@
 import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Effect } from 'effect';
 import { Command } from 'effect/unstable/cli';
-import { Client, ensureServer } from './client/connection';
+import { ensureServer } from './client/connection';
+import { Client } from '@pipes/protocol';
 import { agent } from './cli/agent';
 import {
   cancel,
@@ -21,7 +22,7 @@ import { config } from './cli/config';
 import { connection } from './cli/connection';
 import { mcp } from './cli/mcp';
 import { upgrade } from './cli/upgrade';
-import { PipesError } from './protocol/pipes';
+import { PipesError } from '@pipes/protocol';
 import { ObservabilityLayer } from './observability';
 import { version } from './version';
 
@@ -38,7 +39,7 @@ Command.make(
     yield* Effect.tryPromise({
       catch: (error) => new PipesError({ message: String(error) }),
       try: async () => {
-        const { launch } = await import('./tui/app');
+        const { launch } = await import('./launch');
         await launch(connection);
       },
     });
