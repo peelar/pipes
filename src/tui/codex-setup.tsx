@@ -99,7 +99,7 @@ function SetupContent({ busy, state }: { busy: boolean; state: SetupState }) {
   if (busy) {
     const message =
       state.status === 'installing'
-        ? 'Installing Pipes MCP & skill…'
+        ? 'Installing pipes MCP & skill…'
         : state.status === 'validating'
           ? 'Validating configuration and its agent settings…'
           : state.status === 'creating'
@@ -156,8 +156,8 @@ function SetupContent({ busy, state }: { busy: boolean; state: SetupState }) {
         fg={state.settings.mcpInstalled && state.settings.skillInstalled ? '#a6e3a1' : '#f9e2af'}
       >
         {state.settings.mcpInstalled && state.settings.skillInstalled
-          ? '✓ Pipes MCP & skill installed'
-          : '○ Pipes MCP & skill not installed'}
+          ? '✓ pipes MCP & skill installed'
+          : '○ pipes MCP & skill not installed'}
       </text>
     </>
   );

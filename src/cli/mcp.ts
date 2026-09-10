@@ -32,7 +32,7 @@ const RunTask = Schema.Struct({
 const tools = [
   {
     description:
-      'List work Pipes cannot progress without human judgment. Follow with task_context for any item you will work on.',
+      'List work pipes cannot progress without human judgment. Follow with task_context for any item you will work on.',
     inputSchema: Schema.toJsonSchemaDocument(Empty).schema,
     name: 'attention',
   },

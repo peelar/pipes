@@ -279,7 +279,7 @@ export function TaskDetails({
           flexGrow={1}
           paddingLeft={1}
         >
-          <text>{run?.workflow ?? task.workflow ?? 'Pipes'}</text>
+          <text>{run?.workflow ?? task.workflow ?? 'pipes'}</text>
           {run ? (
             workflowProgress(run)?.map((step) => (
               <StatusText key={step.name} name={step.name} status={step.status} />

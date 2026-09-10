@@ -79,7 +79,7 @@ export function ConnectRepository({
         title="Connect repository"
         width="90%"
       >
-        <text fg="#82aaff">Do you want to connect this repository in Pipes?</text>
+        <text fg="#82aaff">Do you want to connect this repository in pipes?</text>
         <text>{path}</text>
         <text>This connects the repository locally. No repository files are changed.</text>
         <select
@@ -95,7 +95,7 @@ export function ConnectRepository({
             }
           }}
           options={[
-            { description: 'Connect this repository in Pipes', name: 'Yes, connect' },
+            { description: 'Connect this repository in pipes', name: 'Yes, connect' },
             { description: 'Continue without connecting', name: 'No, not now' },
           ]}
         />

@@ -58,7 +58,7 @@ export function resultMcp(report: (result: typeof StepResult.Type) => Promise<vo
             tools: [
               {
                 description:
-                  'Submit the outcome of your assigned Pipes step exactly once. Completion is applied only after your turn ends successfully.',
+                  'Submit the outcome of your assigned pipes step exactly once. Completion is applied only after your turn ends successfully.',
                 inputSchema: Schema.toJsonSchemaDocument(StepResult).schema,
                 name: 'report_result',
               },

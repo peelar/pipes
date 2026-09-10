@@ -23,7 +23,7 @@ try {
     ensureServer(connection, false).pipe(
       Effect.as(true),
       Effect.catchTag('PipesError', (error) =>
-        error.message === 'Pipes server is not running.'
+        error.message === 'pipes server is not running.'
           ? Effect.succeed(false)
           : Effect.fail(error),
       ),
@@ -66,7 +66,7 @@ try {
     await rmdir(configDirectory).catch(() => {});
   }
   await rm(onboardingFile, { force: true });
-  process.stdout.write(`Reset Pipes state in ${connection.directory}. No backup was created.\n`);
+  process.stdout.write(`Reset pipes state in ${connection.directory}. No backup was created.\n`);
 } finally {
   await runtime.dispose();
 }

@@ -69,7 +69,7 @@ export const shutdown = Command.make(
     yield* ensureServer(connection, false);
     const client = yield* Client;
     yield* client.shutdown();
-    yield* Console.log('Pipes server stopped.');
+    yield* Console.log('pipes server stopped.');
   }),
 );
 

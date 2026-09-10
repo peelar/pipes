@@ -113,7 +113,7 @@ export const serve = Effect.fn('serve')(function* (connection: Connection) {
   );
   yield* Effect.flatMap(Execution, (execution) => execution.recover).pipe(Effect.provide(services));
   ready = true;
-  yield* Effect.logInfo(`Pipes listening on ${connection.url}`);
+  yield* Effect.logInfo(`pipes listening on ${connection.url}`);
   yield* Layer.build(GitHub.deliveryLayer.pipe(Layer.provide(Layer.succeedContext(services))));
   yield* Deferred.await(stopped);
   yield* Effect.sleep('100 millis');

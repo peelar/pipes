@@ -14,13 +14,13 @@ case "$OS-$ARCH" in
   Linux-x86_64) ASSET="pipes-linux-x64-baseline" ;;
   Linux-aarch64) ASSET="pipes-linux-arm64" ;;
   *)
-    echo "Pipes has no build for $OS-$ARCH (macOS and Linux only; Windows users can use WSL)." >&2
+    echo "pipes has no build for $OS-$ARCH (macOS and Linux only; Windows users can use WSL)." >&2
     exit 1
     ;;
 esac
 
 if ! command -v codex >/dev/null 2>&1; then
-  echo "Pipes needs the Codex CLI on PATH. Install Codex first, then rerun this script." >&2
+  echo "pipes needs the Codex CLI on PATH. Install Codex first, then rerun this script." >&2
   exit 1
 fi
 

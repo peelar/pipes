@@ -139,7 +139,7 @@ test('connection UI offers local remotes, signs in, selects workflows, and lists
       'https://github.com/apps/pipes-github/installations/new',
     ]);
     expect(view.captureCharFrame()).toContain(
-      'Choose the GitHub account and repositories Pipes may access.',
+      'Choose the GitHub account and repositories pipes may access.',
     );
     await press('RETURN');
     expect(loginSpawn).toHaveBeenCalledWith(['open', 'https://github.com/login/device']);
@@ -195,7 +195,7 @@ test('connection UI offers local remotes, signs in, selects workflows, and lists
         'https://github.com/apps/pipes-github/installations/new',
       ]);
       expect(view.captureCharFrame()).toContain(
-        'Choose the GitHub account and repositories Pipes may access.',
+        'Choose the GitHub account and repositories pipes may access.',
       );
       await press('RETURN');
       expect(spawn).toHaveBeenCalledWith(['open', 'https://github.com/login/device']);

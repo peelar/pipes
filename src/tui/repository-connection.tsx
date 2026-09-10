@@ -207,7 +207,7 @@ export function RepositoryConnection({
     >
       {phase === 'install' ? (
         <box flexDirection="column" gap={1}>
-          <text>Choose the GitHub account and repositories Pipes may access.</text>
+          <text>Choose the GitHub account and repositories pipes may access.</text>
           <text>{installationUrl}</text>
           <select
             focused
@@ -297,7 +297,7 @@ export function RepositoryConnection({
               onSelect={install}
               options={[
                 {
-                  description: 'Signs in through the Pipes GitHub App',
+                  description: 'Signs in through the pipes GitHub App',
                   name: 'Check GitHub connection',
                 },
               ]}

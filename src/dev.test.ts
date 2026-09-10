@@ -100,7 +100,7 @@ develop(${JSON.stringify(connection)}, async (_, signal) => {
     child.kill('SIGTERM');
     await child.exited;
     await expect(runtime.runPromise(ensureServer(connection, false))).rejects.toThrow(
-      'Pipes server is not running.',
+      'pipes server is not running.',
     );
   } finally {
     child?.kill('SIGTERM');

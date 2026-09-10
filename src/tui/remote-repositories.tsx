@@ -81,7 +81,7 @@ export function RemoteRepositories({
   if (afterInstallation) {
     return (
       <box flexDirection="column" gap={1}>
-        <text>Choose the GitHub account and repositories Pipes may access.</text>
+        <text>Choose the GitHub account and repositories pipes may access.</text>
         <text>{installationUrl}</text>
         <select
           focused
@@ -164,7 +164,7 @@ export function RemoteRepositories({
           }}
           options={[
             ...result.repositories.map((name) => ({
-              description: 'Clone into Pipes’ managed directory',
+              description: 'Clone into pipes’ managed directory',
               name,
             })),
             {

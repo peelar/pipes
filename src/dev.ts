@@ -11,7 +11,7 @@ const running = (connection: Connection) =>
   ensureServer(connection, false).pipe(
     Effect.as(true),
     Effect.catchTag('PipesError', (error) =>
-      error.message === 'Pipes server is not running.' ? Effect.succeed(false) : Effect.fail(error),
+      error.message === 'pipes server is not running.' ? Effect.succeed(false) : Effect.fail(error),
     ),
   );
 

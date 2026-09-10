@@ -10,7 +10,7 @@ import { PipesError, PipesRpcs } from '../protocol/pipes';
 
 export function requireSupportedBun(version = Bun.version) {
   if (!Bun.semver?.satisfies(version, '>=1.4.2')) {
-    throw new Error(`Pipes requires Bun 1.4.2 or newer; found ${version}. Run bun upgrade.`);
+    throw new Error(`pipes requires Bun 1.4.2 or newer; found ${version}. Run bun upgrade.`);
   }
 }
 
@@ -73,7 +73,7 @@ export const ensureServer = Effect.fn('ensureServer')(function* (
     return;
   }
   if (!start) {
-    return yield* new PipesError({ message: 'Pipes server is not running.' });
+    return yield* new PipesError({ message: 'pipes server is not running.' });
   }
   yield* Effect.try({
     catch: (error) => new PipesError({ message: `Cannot start server: ${String(error)}` }),

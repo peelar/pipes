@@ -83,7 +83,7 @@ export function Onboarding({
         width="95%"
       >
         <text>
-          Welcome to Pipes. Connect a Git repository, set up Codex, then configure a workflow.
+          Welcome to pipes. Connect a Git repository, set up Codex, then configure a workflow.
         </text>
         <RepositoryConnection
           onClose={() => onClose()}
