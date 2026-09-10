@@ -4,11 +4,30 @@ const Text = Schema.String.check(Schema.isPattern(/\S/));
 export const GitHubRepository = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.{1,2}$)[A-Za-z0-9_.-]+$/),
 );
+const Label = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(100));
+const Labels = Schema.Array(Label).check(Schema.isMinLength(1));
+const GitHubState = Schema.Literals(['open', 'closed', 'all']);
+export const GitHubWhen = Schema.Struct({
+  assigned_to_me: Schema.optionalKey(Schema.Boolean),
+  exclude_labels: Schema.optionalKey(Labels),
+  labels: Schema.optionalKey(Labels),
+  state: Schema.optionalKey(GitHubState),
+});
+export const GitHubRoute = Schema.Struct({
+  assigned_to_me: Schema.optionalKey(Schema.Boolean),
+  exclude_labels: Schema.optionalKey(Labels),
+  labels: Schema.optionalKey(Labels),
+  state: Schema.optionalKey(GitHubState),
+  workflow: Schema.optionalKey(Text),
+});
 export const GitHubPolicy = Schema.Struct({
   assigned_to_me: Schema.optionalKey(Schema.Boolean),
+  exclude_labels: Schema.optionalKey(Labels),
+  labels: Schema.optionalKey(Labels),
   repository: GitHubRepository,
-  state: Schema.optionalKey(Schema.Literals(['open', 'closed', 'all'])),
-  workflow: Text,
+  routes: Schema.optionalKey(Schema.Array(GitHubRoute)),
+  state: Schema.optionalKey(GitHubState),
+  workflow: Schema.optionalKey(Text),
 });
 
 export function githubRepository(value: string) {
@@ -59,12 +78,16 @@ export const Config = Schema.Struct({
     ),
   ),
 }).check(
-  Schema.makeFilter(
-    (config) =>
-      !config.github ||
-      Object.hasOwn(config.workflows, config.github.workflow) ||
-      'GitHub workflow must exist',
-  ),
+  Schema.makeFilter((config) => {
+    const workflows = [
+      config.github?.workflow,
+      ...(config.github?.routes?.map((route) => route.workflow) ?? []),
+    ].filter((workflow) => workflow !== undefined);
+    return (
+      workflows.every((workflow) => Object.hasOwn(config.workflows, workflow)) ||
+      'GitHub workflows must exist'
+    );
+  }),
 );
 
 export type Config = typeof Config.Type;

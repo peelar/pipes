@@ -31,7 +31,14 @@ function repositoriesFor(info: typeof GitHubConnection.Type | undefined) {
 }
 
 function workflowsFor(info: typeof GitHubConnection.Type | undefined) {
-  return info?.policy ? [info.policy.workflow] : (info?.workflows ?? []);
+  if (!info?.policy) {
+    return info?.workflows ?? [];
+  }
+  const configured = [
+    info.policy.workflow,
+    ...(info.policy.routes?.map((route) => route.workflow) ?? []),
+  ].filter((workflow) => workflow !== undefined);
+  return [...new Set(configured)];
 }
 
 function useConnectionKeyboard(
@@ -357,7 +364,18 @@ function connectionHints(phase: string, embedded: boolean) {
 }
 
 function policySummary(info: typeof GitHubConnection.Type | undefined) {
-  return info?.policy
-    ? `Existing code policy: ${info.policy.state ?? 'open'} issues · ${info.policy.assigned_to_me === false ? 'any assignee' : 'assigned to you'}`
-    : 'Default: open issues assigned to you. Policy stays in code.';
+  if (!info?.policy) {
+    return 'Default: open issues assigned to you. Policy stays in code.';
+  }
+  const scope = `${info.policy.state ?? 'open'} issues · ${info.policy.assigned_to_me === false ? 'any assignee' : 'assigned to you'}`;
+  const labels = [
+    ...(info.policy.labels?.map((label) => `+${label}`) ?? []),
+    ...(info.policy.exclude_labels?.map((label) => `-${label}`) ?? []),
+  ].join(' ');
+  const routes = info.policy.routes?.length
+    ? ` · ${info.policy.routes.length} route${info.policy.routes.length === 1 ? '' : 's'}${info.policy.workflow ? '' : ' · rest to inbox'}`
+    : info.policy.workflow
+      ? ''
+      : ' · to inbox';
+  return `Existing code policy: ${scope}${labels ? ` · ${labels}` : ''}${routes}`;
 }

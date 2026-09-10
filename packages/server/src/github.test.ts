@@ -15,6 +15,7 @@ const issue = {
   assignees: [{ id: 7 }],
   body: 'Original request',
   id: 10,
+  labels: [],
   number: 1,
   state: 'open' as const,
   title: 'Fix this',

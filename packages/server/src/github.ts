@@ -10,11 +10,11 @@ import { identity, loginComplete, loginStart, requestError } from './github/auth
 import type { GitHubContext } from './github/context';
 import { intake, startup } from './github/intake';
 import { clone, configurationFor, inspect, repositories } from './github/repos';
-import { eligible, GitHubIssue, validSignature } from './github/schemas';
+import { eligible, GitHubIssue, routeWorkflow, validSignature } from './github/schemas';
 import { get } from './github/auth';
 import { webhook } from './github/webhook';
 
-export { eligible, GitHubIssue, validSignature };
+export { eligible, GitHubIssue, routeWorkflow, validSignature };
 
 export class GitHub extends Context.Service<
   GitHub,
@@ -104,9 +104,13 @@ export class GitHub extends Context.Service<
             });
           }
           if (config.github) {
+            const configured = [
+              config.github.workflow,
+              ...(config.github.routes?.map((route) => route.workflow) ?? []),
+            ].filter((workflow) => workflow !== undefined);
             if (
               config.github.repository.toLowerCase() !== name.toLowerCase() ||
-              config.github.workflow !== input.workflow
+              (configured.length > 0 && !configured.includes(input.workflow))
             ) {
               return yield* new PipesError({
                 message:

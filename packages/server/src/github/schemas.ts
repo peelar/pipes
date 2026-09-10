@@ -7,20 +7,61 @@ export const GitHubIssue = Schema.Struct({
   assignees: Schema.Array(Schema.Struct({ id: Schema.Int })),
   body: Schema.NullOr(Brief),
   id: Schema.Int,
+  labels: Schema.Array(Schema.Struct({ name: Schema.String })),
   number: Schema.Int,
   pull_request: Schema.optionalKey(Schema.Unknown),
   state: Schema.Literals(['open', 'closed']),
   title: Title,
 });
 
-export const eligible = (
-  issue: typeof GitHubIssue.Type,
-  policy: NonNullable<Config['github']>,
-  userId: number,
-) =>
+type Policy = NonNullable<Config['github']>;
+type When = Pick<Policy, 'assigned_to_me' | 'exclude_labels' | 'labels' | 'state'>;
+
+const names = (issue: typeof GitHubIssue.Type) =>
+  issue.labels.map((label) => label.name.toLowerCase());
+
+export const matches = (issue: typeof GitHubIssue.Type, when: When, userId: number) =>
   issue.pull_request === undefined &&
-  ((policy.state ?? 'open') === 'all' || issue.state === (policy.state ?? 'open')) &&
-  (policy.assigned_to_me === false || issue.assignees.some((user) => user.id === userId));
+  ((when.state ?? 'open') === 'all' || issue.state === (when.state ?? 'open')) &&
+  (when.assigned_to_me === false || issue.assignees.some((user) => user.id === userId)) &&
+  (when.labels ?? []).every((wanted) => names(issue).includes(wanted.toLowerCase())) &&
+  !(when.exclude_labels ?? []).some((skipped) => names(issue).includes(skipped.toLowerCase()));
+
+export const eligible = (issue: typeof GitHubIssue.Type, policy: Policy, userId: number) =>
+  matches(issue, policy, userId);
+
+/**
+ * First matching route wins; its workflow may be absent, which admits the
+ * issue to the inbox without a preassigned workflow. When no route matches,
+ * the top-level policy acts as the catch-all filter and fallback workflow.
+ * Returns `false` when the issue is not eligible for intake.
+ */
+export const routeWorkflow = (
+  issue: typeof GitHubIssue.Type,
+  policy: Policy,
+  userId: number,
+): string | undefined | false => {
+  for (const route of policy.routes ?? []) {
+    if (
+      matches(
+        issue,
+        {
+          assigned_to_me: route.assigned_to_me ?? policy.assigned_to_me,
+          exclude_labels: [...(policy.exclude_labels ?? []), ...(route.exclude_labels ?? [])],
+          labels: route.labels ?? policy.labels,
+          state: route.state ?? policy.state,
+        },
+        userId,
+      )
+    ) {
+      return route.workflow ?? policy.workflow;
+    }
+  }
+  if (!matches(issue, policy, userId)) {
+    return false;
+  }
+  return policy.workflow;
+};
 
 export const validSignature = (body: string, signature: string | null, secret: string) => {
   if (!signature || !/^sha256=[a-f0-9]{64}$/.test(signature)) {
