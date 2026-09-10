@@ -83,7 +83,7 @@ You can monitor the work through TUI, jump into an agent session when you want t
 
 ## Run
 
-Install the single binary (macOS and Linux; Windows users can use WSL).
+Install the single binary:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/peelar/pipes/main/scripts/install.sh | sh
