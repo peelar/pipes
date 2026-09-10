@@ -2,6 +2,7 @@ import { Effect, type ManagedRuntime } from 'effect';
 import { useEffect, useState } from 'react';
 import { Client } from '@pipes/protocol';
 import { type GitHubLogin } from '@pipes/protocol';
+import { ChoiceList } from './choice-list';
 
 export const installationUrl = 'https://github.com/apps/pipes-github/installations/new';
 
@@ -83,9 +84,7 @@ export function RemoteRepositories({
       <box flexDirection="column" gap={1}>
         <text>Choose the GitHub account and repositories pipes may access.</text>
         <text>{installationUrl}</text>
-        <select
-          focused
-          height={4}
+        <ChoiceList
           onSelect={(index) => {
             if (index === 0) {
               const next = afterInstallation;
@@ -100,8 +99,8 @@ export function RemoteRepositories({
             }
           }}
           options={[
-            { description: 'Continue after choosing access in GitHub', name: 'Done' },
-            { description: 'Open the GitHub installation page again', name: 'Open GitHub' },
+            { detail: 'Continue after choosing access in GitHub', name: 'Done' },
+            { detail: 'Open the GitHub installation page again', name: 'Open GitHub' },
           ]}
         />
       </box>
@@ -122,9 +121,8 @@ export function RemoteRepositories({
     return (
       <box flexDirection="column">
         <text fg="#f38ba8">{error}</text>
-        <select
-          focused={!authenticating}
-          height={4}
+        <ChoiceList
+          busy={authenticating}
           onSelect={(index) => {
             if (index === 0) {
               install('login');
@@ -134,10 +132,10 @@ export function RemoteRepositories({
           }}
           options={[
             {
-              description: 'Choose account and repository access in GitHub',
+              detail: 'Choose account and repository access in GitHub',
               name: 'Connect GitHub',
             },
-            { description: 'Check credentials and load repositories again', name: 'Retry' },
+            { detail: 'Check credentials and load repositories again', name: 'Retry' },
           ]}
         />
       </box>
@@ -151,9 +149,8 @@ export function RemoteRepositories({
       <text fg="#a6e3a1">Connected to GitHub as @{result.login}</text>
       <text>Only connect repositories you trust: configuration is executable TypeScript.</text>
       {result.repositories.length ? (
-        <select
-          focused
-          height={10}
+        <ChoiceList
+          maxVisible={8}
           onSelect={(index) => {
             const repository = result.repositories[index];
             if (repository) {
@@ -164,27 +161,24 @@ export function RemoteRepositories({
           }}
           options={[
             ...result.repositories.map((name) => ({
-              description: 'Clone into pipes’ managed directory',
+              detail: 'Clone into pipes’ managed directory',
               name,
             })),
             {
-              description: 'Change account and repository access in GitHub',
+              detail: 'Change account and repository access in GitHub',
               name: 'Manage GitHub access',
             },
           ]}
-          showScrollIndicator
         />
       ) : (
-        <select
-          focused
-          height={4}
+        <ChoiceList
           onSelect={(index) => (index === 0 ? install('reload') : reload())}
           options={[
             {
-              description: 'Choose account and repository access in GitHub',
+              detail: 'Choose account and repository access in GitHub',
               name: 'Manage GitHub access',
             },
-            { description: 'Load repositories again', name: 'Retry' },
+            { detail: 'Load repositories again', name: 'Retry' },
           ]}
         />
       )}

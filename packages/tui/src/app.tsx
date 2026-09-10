@@ -12,6 +12,7 @@ import {
   type Task,
 } from '@pipes/protocol';
 import { ConnectRepository, useSuggestedRoot } from './repository-picker';
+import { ChoiceList } from './choice-list';
 import { RepositoryConnection } from './repository-connection';
 import { Onboarding, readOnboarding } from './onboarding';
 import { CodexSetup } from './codex-setup';
@@ -482,17 +483,16 @@ export function App({
       <box flexDirection="row" flexGrow={1} gap={1} minHeight={0}>
         <box border flexDirection="column" padding={1} title="Queue" width="33%">
           {snapshot.tasks.length ? (
-            <select
-              flexGrow={1}
+            <ChoiceList
               focused={paneFocused(mode, pane, 'queue', modal)}
-              minHeight={0}
+              maxVisible={12}
               onChange={(index) => setSelected(index)}
               options={snapshot.tasks.map((item) => ({
-                description: `${statusVisuals[item.status].label} · ${item.sourceId?.split(':', 1)[0] ?? 'manual'}`,
+                detail: `${statusVisuals[item.status].label} · ${item.sourceId?.split(':', 1)[0] ?? 'manual'}`,
+                id: item.id,
                 name: `${item.status === 'running' ? runningIcon : statusVisuals[item.status].icon} ${item.title}`,
               }))}
               selectedIndex={selected}
-              showScrollIndicator
             />
           ) : (
             <text flexGrow={1}>{emptyQueue(repository?.name)}</text>

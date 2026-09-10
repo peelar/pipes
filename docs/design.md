@@ -118,7 +118,7 @@ After a successful run is checkpointed, Pipes cleans up its Git worktree while p
 
 ## Interactive handoff
 
-The TUI is keyboard-first. Display keyboard shortcuts in brackets. `[m] manage` opens a tabbed modal for repository connections and agent setup. Connections presents one choice list for the current repository, local directory browsing, and GitHub repositories; local and remote are not nested tabs. A configured action such as `O` opens a task in a new terminal pane or window. Terminal launch configuration is separate from harness launch configuration.
+The TUI is keyboard-first. Display keyboard shortcuts in brackets. `[m] manage` opens a tabbed modal for repository connections and agent setup. Connections lists the registered repositories and presents one choice list for connecting the current repository, local directory browsing, and GitHub repositories; local and remote are not nested tabs. A configured action such as `O` opens a task in a new terminal pane or window. Terminal launch configuration is separate from harness launch configuration.
 
 Jumping in means interactive takeover: stop the current worker and confirm it has stopped, then hold workflow progression while the human owns the step. For Codex, launch the actual bundled `codex resume` with the saved session ID in the run's worktree. Read-only conversation inspection is a separate action.
 

@@ -594,11 +594,16 @@ test('CLI, live terminal queue, validation, and server restart share durable sta
     await act(async () => {
       view!.mockInput.pressKey('TAB');
     });
-    await view.waitForFrame((frame) => frame.includes('Connect a repository'));
+    await view.waitForFrame((frame) => frame.includes('Add a repository'));
     expect(view.captureCharFrame()).toContain('Manage');
-    expect(view.captureCharFrame()).toContain('Connect this repository');
+    expect(view.captureCharFrame()).toContain('Repositories');
+    expect(view.captureCharFrame()).toContain('● pipes');
+    expect(view.captureCharFrame()).toContain('● a project');
+    expect(view.captureCharFrame()).toContain('Add a repository');
+    expect(view.captureCharFrame()).toContain('❯ Connect this repository');
     expect(view.captureCharFrame()).toContain('Browse local directories');
     expect(view.captureCharFrame()).toContain('Clone from GitHub');
+    expect(view.captureCharFrame()).toContain('[↑↓] choose · [Enter] select');
     await act(async () => {
       view!.mockInput.pressKey('ARROW_DOWN');
       view!.mockInput.pressKey('RETURN');

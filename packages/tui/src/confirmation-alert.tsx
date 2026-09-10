@@ -1,4 +1,5 @@
 import { useKeyboard } from '@opentui/react';
+import { ChoiceList } from './choice-list';
 
 export type DestructiveAction = { action: string; message: string; run: () => void };
 
@@ -55,16 +56,14 @@ export function ConfirmationAlert({
           <b>{destructiveAction.action}?</b>
         </text>
         <text>{destructiveAction.message}</text>
-        <select
-          focused
-          height={4}
+        <ChoiceList
           onSelect={(index) => (index === 0 ? confirm() : onClose())}
           options={[
             {
-              description: 'Proceed with this action',
+              detail: 'Proceed with this action',
               name: `Yes, ${destructiveAction.action.toLowerCase()}`,
             },
-            { description: 'Leave the task unchanged', name: 'No, keep it' },
+            { detail: 'Leave the task unchanged', name: 'No, keep it' },
           ]}
         />
         <text>[↑↓] choose · [Enter] confirm · [y] yes · [n] / [Esc] no</text>

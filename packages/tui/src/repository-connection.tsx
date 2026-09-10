@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'rea
 import { Client } from '@pipes/protocol';
 import { type GitHubConnection, type GitHubLogin, type Repository } from '@pipes/protocol';
 import { CodexSetup } from './codex-setup';
+import { ChoiceList } from './choice-list';
 import { installationUrl, openBrowser, RemoteRepositories } from './remote-repositories';
 import { RepositoryPicker } from './repository-picker';
 
@@ -209,11 +210,9 @@ export function RepositoryConnection({
         <box flexDirection="column" gap={1}>
           <text>Choose the GitHub account and repositories pipes may access.</text>
           <text>{installationUrl}</text>
-          <select
-            focused
-            height={2}
+          <ChoiceList
             onSelect={() => void login()}
-            options={[{ description: 'Continue after choosing access in GitHub', name: 'Done' }]}
+            options={[{ detail: 'Continue after choosing access in GitHub', name: 'Done' }]}
           />
         </box>
       ) : phase === 'login' && authorization ? (
@@ -260,9 +259,8 @@ export function RepositoryConnection({
         <>
           <text>{path}</text>
           <text>Attach GitHub issue intake for this repository’s remote?</text>
-          <select
-            focused={!busy}
-            height={6}
+          <ChoiceList
+            busy={busy}
             onSelect={(index) => {
               const target = repositoriesFor(info)[index];
               if (target) {
@@ -273,10 +271,10 @@ export function RepositoryConnection({
             }}
             options={[
               ...repositoriesFor(info).map((name) => ({
-                description: 'Attach GitHub intake',
+                detail: 'Attach GitHub intake',
                 name,
               })),
-              { description: 'Connect without adding GitHub intake', name: 'Local only' },
+              { detail: 'Connect without adding GitHub intake', name: 'Local only' },
             ]}
           />
         </>
@@ -291,25 +289,23 @@ export function RepositoryConnection({
           </text>
           <text>{policySummary(info)}</text>
           {!account ? (
-            <select
-              focused={!busy}
-              height={2}
+            <ChoiceList
+              busy={busy}
               onSelect={install}
               options={[
                 {
-                  description: 'Signs in through the pipes GitHub App',
+                  detail: 'Signs in through the pipes GitHub App',
                   name: 'Check GitHub connection',
                 },
               ]}
             />
           ) : !info?.workflows.length ? (
-            <select
-              focused={!busy}
-              height={2}
+            <ChoiceList
+              busy={busy}
               onSelect={() => setPhase('setup')}
               options={[
                 {
-                  description: 'Connect Codex and create the starter configuration',
+                  detail: 'Connect Codex and create the starter configuration',
                   name: 'Set up a workflow',
                 },
               ]}
@@ -321,9 +317,8 @@ export function RepositoryConnection({
                   ? 'Keep existing policy and import matching issues.'
                   : 'Choose a workflow. [Enter] creates .pipes/github.ts and imports matching issues.'}
               </text>
-              <select
-                focused={!busy}
-                height={5}
+              <ChoiceList
+                busy={busy}
                 onSelect={(index) => {
                   const workflow = workflowsFor(info)[index];
                   if (workflow) {
@@ -336,7 +331,7 @@ export function RepositoryConnection({
                   }
                 }}
                 options={workflowsFor(info).map((name) => ({
-                  description: 'Attach intake',
+                  detail: 'Attach intake',
                   name,
                 }))}
               />

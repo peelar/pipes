@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { useEffect, useState } from 'react';
+import { ChoiceList } from './choice-list';
 
 const exec = promisify(execFile);
 
@@ -82,21 +83,18 @@ export function ConnectRepository({
         <text fg="#82aaff">Do you want to connect this repository in pipes?</text>
         <text>{path}</text>
         <text>This connects the repository locally. No repository files are changed.</text>
-        <select
-          focused={!busy}
-          height={4}
+        <ChoiceList
+          busy={busy}
           onSelect={(index) => {
-            if (!busy) {
-              if (index === 0) {
-                onConfirm();
-              } else {
-                onDecline();
-              }
+            if (index === 0) {
+              onConfirm();
+            } else {
+              onDecline();
             }
           }}
           options={[
-            { description: 'Connect this repository in pipes', name: 'Yes, connect' },
-            { description: 'Continue without connecting', name: 'No, not now' },
+            { detail: 'Connect this repository in pipes', name: 'Yes, connect' },
+            { detail: 'Continue without connecting', name: 'No, not now' },
           ]}
         />
         <text>
@@ -124,6 +122,11 @@ export function expandPath(path: string, base: string) {
     base,
     path === '~' ? homedir() : path.startsWith('~/') ? homedir() + path.slice(1) : path,
   );
+}
+
+export function displayPath(path: string) {
+  const home = homedir();
+  return path === home ? '~' : path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
 }
 
 export async function directories(path: string) {
@@ -173,6 +176,7 @@ function ConnectionChoices({
   onGitHub,
   onRegister,
   ready,
+  repositories,
   root,
 }: {
   busy: boolean;
@@ -180,45 +184,64 @@ function ConnectionChoices({
   onGitHub?: () => void;
   onRegister: (path: string) => void;
   ready: boolean;
+  repositories: ReadonlyArray<{ name: string; path: string }>;
   root?: string;
 }) {
   if (!ready) {
     return <text fg="#f9e2af">Finding the current repository…</text>;
   }
   const options = [
-    ...(root ? [{ description: root, name: 'Connect this repository' }] : []),
-    {
-      description: 'Choose another directory on this computer',
-      name: 'Browse local directories',
-    },
-    ...(onGitHub
-      ? [
-          {
-            description: 'Choose a repository available to your GitHub account',
-            name: 'Clone from GitHub',
-          },
-        ]
-      : []),
+    ...(root ? [{ detail: displayPath(root), name: 'Connect this repository' }] : []),
+    { name: 'Browse local directories' },
+    ...(onGitHub ? [{ name: 'Clone from GitHub' }] : []),
   ];
   return (
-    <>
-      <text>Connect a repository</text>
-      <select
-        focused={!busy}
-        height={6}
-        onSelect={(index) => {
-          if (root && index === 0) {
-            onRegister(root);
-          } else if (index === (root ? 1 : 0)) {
-            onBrowse();
-          } else {
-            onGitHub?.();
-          }
-        }}
-        options={options}
-      />
-    </>
+    <box flexDirection="column" gap={1}>
+      {repositories.length > 0 && (
+        <box flexDirection="column">
+          <text fg="#a6adc8">Repositories</text>
+          {repositories.map((repository) => (
+            <text key={repository.path}>
+              <span fg="#a6e3a1">● </span>
+              {repository.name}
+              <span fg="#a6adc8">{`  ${displayPath(repository.path)}`}</span>
+            </text>
+          ))}
+        </box>
+      )}
+      <box flexDirection="column">
+        <text>Add a repository</text>
+        <ChoiceList
+          busy={busy}
+          onSelect={(selected) => {
+            if (root && selected === 0) {
+              onRegister(root);
+            } else if (selected === (root ? 1 : 0)) {
+              onBrowse();
+            } else {
+              onGitHub?.();
+            }
+          }}
+          options={options}
+        />
+        <text fg="#a6adc8">[↑↓] choose · [Enter] select</text>
+      </box>
+    </box>
   );
+}
+
+function connectionHeight(
+  browsing: boolean,
+  repositories: ReadonlyArray<unknown>,
+  root: string | undefined,
+  remote: boolean,
+) {
+  if (browsing) {
+    return 10;
+  }
+  const choices = (root ? 1 : 0) + 1 + (remote ? 1 : 0);
+  const connected = repositories.length > 0 ? repositories.length + 6 : 4;
+  return choices + connected;
 }
 
 export function RepositoryPicker({
@@ -319,7 +342,11 @@ export function RepositoryPicker({
   ];
 
   return (
-    <box flexDirection="column" flexShrink={0} height={10}>
+    <box
+      flexDirection="column"
+      flexShrink={0}
+      height={connectionHeight(browsing, repositories, listing?.root, onGitHub !== undefined)}
+    >
       {browsing && <text fg="#a6adc8">{directory}</text>}
       {browsing && (
         <text fg="#a6e3a1">
@@ -337,6 +364,7 @@ export function RepositoryPicker({
           onGitHub={onGitHub}
           onRegister={onRegister}
           ready={ready}
+          repositories={repositories}
           root={listing?.root}
         />
       ) : editing ? (
@@ -353,10 +381,10 @@ export function RepositoryPicker({
           value={path}
         />
       ) : ready ? (
-        <select
-          flexGrow={1}
-          focused={!busy}
+        <ChoiceList
+          busy={busy}
           key={`${directory}:${ready}`}
+          maxVisible={6}
           onSelect={(index) => {
             const option = browseOptions[index];
             if (!option || busy) {
@@ -368,8 +396,10 @@ export function RepositoryPicker({
               setDirectory(option.value);
             }
           }}
-          options={browseOptions}
-          showScrollIndicator
+          options={browseOptions.map((option) => ({
+            detail: option.description || undefined,
+            name: option.name,
+          }))}
         />
       ) : null}
       {browsing && !editing && <text fg="#a6adc8">[←] parent · [p] type a path</text>}
