@@ -3,7 +3,7 @@ import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bootHarness, harnessGit } from '../../test/execution-harness';
+import { bootHarness, harnessGit } from '../../../test/execution-harness';
 import { resumeArguments } from './environment';
 import { Store } from './store';
 

@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { Config, type Agent } from '@pipes/protocol';
 import { PipesError, type Run, type StepResult } from '@pipes/protocol';
-import { selfCommand } from '../self';
+import { selfCommand } from './self';
 import { codexBinary, openCodex, probeCodex } from './codex-acp';
 import { failure } from './errors';
 import { makeGit } from './git';

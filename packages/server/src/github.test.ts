@@ -6,7 +6,7 @@ import { createHmac } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import example from '../../.pipes/config';
+import example from '../../../.pipes/config';
 import { decodeConfig, githubRepository } from '@pipes/protocol';
 import { GitHub, eligible, validSignature } from './github';
 import { Store } from './store';

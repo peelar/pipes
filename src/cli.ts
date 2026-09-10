@@ -24,7 +24,7 @@ import { mcp } from './cli/mcp';
 import { upgrade } from './cli/upgrade';
 import { PipesError } from '@pipes/protocol';
 import { ObservabilityLayer } from './observability';
-import { version } from './version';
+import { version } from '@pipes/server/version';
 
 Command.make(
   'pipes',

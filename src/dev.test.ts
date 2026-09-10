@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Effect, ManagedRuntime } from 'effect';
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureServer } from './client/connection';
@@ -17,9 +17,23 @@ test('dev applies pending migrations before opening the TUI on startup and watch
   try {
     await writeFile(join(directory, 'token'), connection.token, { mode: 0o600 });
     await cp('src', join(directory, 'src'), { recursive: true });
+    await cp('packages', join(directory, 'packages'), { recursive: true });
     await cp('skills', join(directory, 'skills'), { recursive: true });
     await cp('tsconfig.json', join(directory, 'tsconfig.json'));
-    await symlink(resolve('node_modules'), join(directory, 'node_modules'));
+    // Mirror the root node_modules but resolve workspace packages to the copy,
+    // so watch reloads exercise the copied tree instead of the real one.
+    await mkdir(join(directory, 'node_modules', '@pipes'), { recursive: true });
+    for (const entry of await readdir(resolve('node_modules'))) {
+      if (entry !== '@pipes') {
+        await symlink(join(resolve('node_modules'), entry), join(directory, 'node_modules', entry));
+      }
+    }
+    for (const name of await readdir(join(directory, 'packages'))) {
+      await symlink(
+        join(directory, 'packages', name),
+        join(directory, 'node_modules', '@pipes', name),
+      );
+    }
     const repositoryPath = join(directory, 'project');
     await mkdir(repositoryPath);
     expect(
@@ -43,7 +57,7 @@ test('dev applies pending migrations before opening the TUI on startup and watch
     const uiSource = await readFile(uiPath, 'utf8');
     await writeFile(serverPath, `${serverSource}\nexport const reloadMarker = 1;\n`);
     await writeFile(uiPath, `${uiSource}\nexport const reloadMarker = 1;\n`);
-    const storePath = join(directory, 'src/server/store.ts');
+    const storePath = join(directory, 'packages/server/src/store.ts');
     const storeSource = await readFile(storePath, 'utf8');
     const withMigrations = (count: number) =>
       storeSource.replace(

@@ -12,8 +12,8 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { CodexProbe, CodexSettings, PipesError } from '@pipes/protocol';
-import { selfCommand } from '../self';
-import { version } from '../version';
+import { selfCommand } from './self';
+import { version } from './version';
 
 const authRequired = Schema.is(Schema.Struct({ code: Schema.Literal(-32_000) }));
 const errorMessage = Schema.is(Schema.Struct({ message: Schema.String }));

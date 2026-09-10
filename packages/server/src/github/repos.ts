@@ -5,7 +5,7 @@ import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { decodeConfig, githubRepository, GitHubRepository } from '@pipes/protocol';
 import { PipesError, type Repository } from '@pipes/protocol';
-import { selfCommand } from '../../self';
+import { selfCommand } from '../self';
 import { credential, get, identity, requestError } from './auth';
 import type { GitHubContext } from './context';
 

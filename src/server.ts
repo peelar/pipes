@@ -7,13 +7,13 @@ import { join } from 'node:path';
 import { settings } from './client/connection';
 import { type Connection } from '@pipes/protocol';
 import { PipesError, PipesRpcs } from '@pipes/protocol';
-import { Execution } from './server/execution';
-import { Environment } from './server/environment';
-import { Store } from './server/store';
-import { GitHub } from './server/github';
-import { checkCodexConfig, installCodex, probeCodex, setupCodex } from './server/codex';
+import { Execution } from '@pipes/server/execution';
+import { Environment } from '@pipes/server/environment';
+import { Store } from '@pipes/server/store';
+import { GitHub } from '@pipes/server/github';
+import { checkCodexConfig, installCodex, probeCodex, setupCodex } from '@pipes/server/codex';
 import { ObservabilityLayer } from './observability';
-import { readConversation } from './server/conversation';
+import { readConversation } from '@pipes/server/conversation';
 
 export const serve = Effect.fn('serve')(function* (connection: Connection) {
   const stopped = yield* Deferred.make<void>();

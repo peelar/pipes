@@ -4,7 +4,7 @@ import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { resolve } from 'node:path';
 import { AgentCommand } from '@pipes/protocol';
 import { PipesError } from '@pipes/protocol';
-import { selfCommand } from '../self';
+import { selfCommand } from '@pipes/server/self';
 import { connect } from './connection';
 
 export const agent = Command.make(

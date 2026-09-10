@@ -13,6 +13,7 @@
         "@opentui/react": "0.5.11",
         "@pipes/mcp": "workspace:*",
         "@pipes/protocol": "workspace:*",
+        "@pipes/server": "workspace:*",
         "@pipes/tui": "workspace:*",
         "effect": "4.0.0-rc.112",
         "react": "19.2.4",
@@ -45,6 +46,19 @@
       "version": "0.0.1",
       "dependencies": {
         "effect": "4.0.0-rc.112",
+      },
+    },
+    "packages/server": {
+      "name": "@pipes/server",
+      "version": "0.0.1",
+      "dependencies": {
+        "@effect/sql-sqlite-bun": "4.0.0-rc.112",
+        "@pipes/mcp": "workspace:*",
+        "@pipes/protocol": "workspace:*",
+        "effect": "4.0.0-rc.112",
+      },
+      "devDependencies": {
+        "@effect/platform-bun": "4.0.0-rc.112",
       },
     },
     "packages/tui": {
@@ -315,6 +329,8 @@
     "@pipes/mcp": ["@pipes/mcp@workspace:packages/mcp"],
 
     "@pipes/protocol": ["@pipes/protocol@workspace:packages/protocol"],
+
+    "@pipes/server": ["@pipes/server@workspace:packages/server"],
 
     "@pipes/tui": ["@pipes/tui@workspace:packages/tui"],
 

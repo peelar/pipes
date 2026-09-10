@@ -5,8 +5,8 @@ import { rename, rm, writeFile } from 'node:fs/promises';
 import { ensureServer } from '../client/connection';
 import { Client } from '@pipes/protocol';
 import { PipesError } from '@pipes/protocol';
-import { isSourceCheckout } from '../self';
-import { version } from '../version';
+import { isSourceCheckout } from '@pipes/server/self';
+import { version } from '@pipes/server/version';
 import { connection } from './connection';
 
 /** Release asset name for a platform, matching scripts/install.sh. */

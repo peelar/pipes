@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { writeCodexFixture } from '../../test/codex-fixture';
+import { writeCodexFixture } from '../../../test/codex-fixture';
 import { decodeConfig } from '@pipes/protocol';
 import {
   checkCodexConfig,

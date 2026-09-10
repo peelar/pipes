@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { selfCommand } from '../self';
+import { selfCommand } from '@pipes/server/self';
 import { PipesError, requireSupportedBun, type Connection } from '@pipes/protocol';
 import { Effect, Schema } from 'effect';
 

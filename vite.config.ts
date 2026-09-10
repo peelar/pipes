@@ -16,7 +16,7 @@ export default defineConfig({
       {
         // Ratchet for the server refactor: every file this plan touches
         // is red until it is split. Green files must stay green.
-        files: ['src/server/**/*.ts'],
+        files: ['packages/server/src/**/*.ts'],
         rules: {
           'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
         },
