@@ -16,7 +16,7 @@ A terminal-based personal software factory built to protect your attention.
 
 ---
 
-Each source of software development tasks has its own process and definition of done. pipes lets you codify them and forward the boring work to the agents, without you babysitting them.
+Each source of software work follows its own process and definition of done. pipes lets you codify them and forward the boring parts to the agents, without you babysitting them.
 
 You start by defining a TypeScript workflow (pipe):
 
