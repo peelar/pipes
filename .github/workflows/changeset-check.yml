@@ -6,7 +6,7 @@ on:
 
 jobs:
   check:
-    # The Version Packages PR consumes changesets by design; never block it.
+    # The Release PR consumes changesets by design; never block it.
     if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     steps:

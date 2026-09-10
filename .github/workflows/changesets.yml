@@ -12,13 +12,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
       - run: bun install
-      - name: Version Packages PR
+      - name: Release PR
         uses: changesets/action@v1
         with:
           version: bun run version-packages
-          # No npm publish: pipes ships binaries via tags (see release.yml).
-          publish: echo "Binaries ship by pushing a tag, not through changesets."
+          # No npm publish: pushing the version tag triggers release.yml,
+          # which builds binaries and creates the GitHub Release automatically.
+          publish: bun scripts/changeset-publish.ts
+          title: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Name the release PR Release <version>
+        # changesets/action only takes a static title, so append the version.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          number=$(gh pr list --head changeset-release/main --json number --jq '.[0].number // empty')
+          if [ -z "$number" ]; then
+            exit 0
+          fi
+          git fetch origin changeset-release/main 2>/dev/null || true
+          version=$(git show FETCH_HEAD:packages/pipes/package.json | jq -r .version)
+          current=$(gh pr view "$number" --json title --jq .title)
+          wanted="Release $version"
+          if [ "$current" != "$wanted" ]; then
+            gh pr edit "$number" --title "$wanted"
+          fi
