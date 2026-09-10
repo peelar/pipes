@@ -1,11 +1,11 @@
 import { expect, spyOn, test } from 'bun:test';
 import { testRender } from '@opentui/react/test-utils';
-import { Effect, Layer, ManagedRuntime } from 'effect';
+import { Effect } from 'effect';
 import { tmpdir } from 'node:os';
 import { act } from 'react';
-import { Client } from '@pipes/protocol';
-import { PipesError, Repository } from '@pipes/protocol';
+import { PipesError, Repository, type Client } from '@pipes/protocol';
 import { RepositoryConnection } from './repository-connection';
+import { press as pressView, stubClient } from './test-helpers';
 
 test('connection UI offers local remotes, signs in, selects workflows, and lists remote repositories', async () => {
   const repository = new Repository({ id: 'repo', name: 'repo', path: tmpdir() });
@@ -20,65 +20,53 @@ test('connection UI offers local remotes, signs in, selects workflows, and lists
   let closed = 0;
   const inspection = Promise.withResolvers<void>();
   const identity = Promise.withResolvers<void>();
-  const runtime = ManagedRuntime.make(
-    Layer.effect(
-      Client,
-      Effect.map(Client, (client) =>
-        Client.of({
-          ...client,
-          githubAttach: (input) =>
-            Effect.sync(() => {
-              attached.push(input);
-              return repository;
-            }),
-          githubClone: (input) =>
-            Effect.sync(() => {
-              clones.push(input.repository);
-              return tmpdir();
-            }),
-          githubIdentity: () =>
-            Effect.promise(() => identity.promise).pipe(
-              Effect.flatMap(() =>
-                identityFails
-                  ? Effect.fail(new PipesError({ message: 'Sign in, then retry.' }))
-                  : Effect.succeed('peelar'),
-              ),
-            ),
-          githubInspect: () =>
-            Effect.promise(async () => {
-              await inspection.promise;
-              return { remotes: ['peelar/pipes'], workflows: ['first', 'second'] };
-            }),
-          githubLoginComplete: () =>
-            Effect.promise(() => authentication.promise).pipe(Effect.as('peelar')),
-          githubLoginStart: () =>
-            Effect.succeed({
-              deviceCode: 'device-code',
-              interval: 5,
-              userCode: 'ABCD-1234',
-              verificationUri: 'https://github.com/login/device',
-            }),
-          githubRepositories: () =>
-            Effect.promise(() => listing.promise).pipe(
-              Effect.flatMap(() =>
-                listingFails
-                  ? Effect.fail(new PipesError({ message: 'Sign in to load repositories.' }))
-                  : Effect.succeed({ login: 'peelar', repositories: ['another/project'] }),
-              ),
-            ),
-          register: () =>
-            Effect.sync(() => {
-              localOnly++;
-              return repository;
-            }),
-        } as Client['Service']),
+  const runtime = stubClient({
+    githubAttach: (input) =>
+      Effect.sync(() => {
+        attached.push(input);
+        return repository;
+      }),
+    githubClone: (input) =>
+      Effect.sync(() => {
+        clones.push(input.repository);
+        return tmpdir();
+      }),
+    githubIdentity: () =>
+      Effect.promise(() => identity.promise).pipe(
+        Effect.flatMap(() =>
+          identityFails
+            ? Effect.fail(new PipesError({ message: 'Sign in, then retry.' }))
+            : Effect.succeed('peelar'),
+        ),
       ),
-    ).pipe(
-      Layer.provide(
-        Client.layer({ directory: tmpdir(), port: 1, token: 'test', url: 'http://127.0.0.1:1' }),
+    githubInspect: () =>
+      Effect.promise(async () => {
+        await inspection.promise;
+        return { remotes: ['peelar/pipes'], workflows: ['first', 'second'] };
+      }),
+    githubLoginComplete: () =>
+      Effect.promise(() => authentication.promise).pipe(Effect.as('peelar')),
+    githubLoginStart: () =>
+      Effect.succeed({
+        deviceCode: 'device-code',
+        interval: 5,
+        userCode: 'ABCD-1234',
+        verificationUri: 'https://github.com/login/device',
+      }),
+    githubRepositories: () =>
+      Effect.promise(() => listing.promise).pipe(
+        Effect.flatMap(() =>
+          listingFails
+            ? Effect.fail(new PipesError({ message: 'Sign in to load repositories.' }))
+            : Effect.succeed({ login: 'peelar', repositories: ['another/project'] }),
+        ),
       ),
-    ),
-  );
+    register: () =>
+      Effect.sync(() => {
+        localOnly++;
+        return repository;
+      }),
+  } as Partial<Client['Service']>);
   const render = (initialPath?: string) =>
     testRender(
       <RepositoryConnection
@@ -95,13 +83,7 @@ test('connection UI offers local remotes, signs in, selects workflows, and lists
       { height: 30, width: 110 },
     );
   let view = await render(tmpdir());
-  const press = async (key: string) => {
-    await act(async () => {
-      view.mockInput.pressKey(key);
-      await Bun.sleep(50);
-    });
-    await view.flush();
-  };
+  const press = (key: string) => pressView(view, key);
   const destroy = () =>
     act(async () => {
       view.renderer.destroy();

@@ -84,7 +84,11 @@ export function ChoiceList({
               ? '↓ '
               : '  ';
         return (
-          <text bg={selected ? '#313244' : undefined} key={option.id ?? option.name}>
+          <text
+            bg={selected ? '#313244' : undefined}
+            key={option.id ?? option.name}
+            wrapMode="none"
+          >
             <span fg={selected ? '#89b4fa' : '#585b70'}>{marker}</span>
             {option.name}
             {option.detail && <span fg="#a6adc8">{`  ${option.detail}`}</span>}

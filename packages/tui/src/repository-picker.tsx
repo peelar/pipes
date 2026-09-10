@@ -201,7 +201,7 @@ function ConnectionChoices({
         <box flexDirection="column">
           <text fg="#a6adc8">Repositories</text>
           {repositories.map((repository) => (
-            <text key={repository.path}>
+            <text key={repository.path} wrapMode="none">
               <span fg="#a6e3a1">● </span>
               {repository.name}
               <span fg="#a6adc8">{`  ${displayPath(repository.path)}`}</span>
