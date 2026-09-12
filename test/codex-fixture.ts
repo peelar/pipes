@@ -45,9 +45,20 @@ agent().onRequest('initialize', ({params}) => {
     while (!existsSync(${JSON.stringify(join(directory, 'release'))})) await Bun.sleep(20);
   }
   if (mode !== 'execute-missing') {
-    const response = await fetch(mcp.url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...Object.fromEntries(mcp.headers.map(h => [h.name, h.value])) }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'report_result', arguments: { status: mode === 'execute-blocked' ? 'blocked' : 'completed', summary: 'Fixture result' } } }) });
+    const step = (params.prompt[0].text.match(/, step ([^,]+), attempt/) || [])[1];
+    const report = () => {
+      if (mode === 'route-left' && step === 'classify') return { status: 'completed', output: 'left', summary: 'Fixture route' };
+      if (mode === 'route-no-output' && step === 'classify') return { status: 'completed', summary: 'Fixture result' };
+      if (mode === 'route-wrong-output' && step === 'classify') return { status: 'completed', output: 'middle', summary: 'Fixture result' };
+      if (mode === 'route-stray-output') return { status: 'completed', output: 'left', summary: 'Fixture route' };
+      return { status: mode === 'execute-blocked' ? 'blocked' : 'completed', summary: 'Fixture result' };
+    };
+    const response = await fetch(mcp.url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...Object.fromEntries(mcp.headers.map(h => [h.name, h.value])) }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'report_result', arguments: report() } }) });
     const body = await response.json();
-    if (body.result?.isError || !response.ok) throw new Error(JSON.stringify(body));
+    if (body.result?.isError || !response.ok) {
+      appendFileSync(${JSON.stringify(join(directory, 'tool-errors.txt'))}, ((body.result && body.result.content && body.result.content[0] && body.result.content[0].text) || String(body)) + '\\n');
+      throw new Error(JSON.stringify(body));
+    }
   }
   if (mode === 'execute-crash') process.exit(1);
   if (mode === 'execute-report-wait') {

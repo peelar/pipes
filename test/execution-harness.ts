@@ -18,6 +18,7 @@ export const harnessGit = async (cwd: string, ...args: Array<string>) => {
 export interface Harness {
   call: <A, E>(f: (client: Client['Service']) => Effect.Effect<A, E>) => Promise<A>;
   configure: (mode: string, setup?: Array<string>) => void;
+  configureSteps: (mode: string, steps: Array<ConfigurableStep>, setup?: Array<string>) => void;
   connection: { directory: string; port: number; token: string; url: string };
   directory: string;
   dispose: () => Promise<void>;
@@ -29,6 +30,12 @@ export interface Harness {
   shutdown: () => Promise<void>;
   submit: () => Promise<Task>;
   waitForRun: (id: string, predicate: (run: Run) => boolean) => Promise<Run>;
+}
+
+export interface ConfigurableStep {
+  name: string;
+  prompt?: string;
+  routes?: Record<string, Array<ConfigurableStep>>;
 }
 
 export const bootHarness = async (): Promise<Harness> => {
@@ -60,10 +67,42 @@ export const bootHarness = async (): Promise<Harness> => {
   const clients = { current: ManagedRuntime.make(Client.layer(connection)) };
   const call = <A, E>(f: (client: Client['Service']) => Effect.Effect<A, E>) =>
     clients.current.runPromise(Effect.flatMap(Client, f));
-  const configure = (mode: string, setup?: Array<string>) =>
+  interface BuiltStep {
+    agent: { command: Array<string>; model: string; provider: string; reasoning: string };
+    name: string;
+    prompt: string;
+    routes?: Record<string, Array<BuiltStep>>;
+  }
+
+  const configureSteps = (mode: string, steps: Array<ConfigurableStep>, setup?: Array<string>) => {
+    const build = (list: Array<ConfigurableStep>): Array<BuiltStep> =>
+      list.map(({ name, prompt, routes }) => ({
+        agent: {
+          command: [process.execPath, fixture, mode],
+          model: 'large',
+          provider: 'codex',
+          reasoning: 'high',
+        },
+        name,
+        prompt: prompt ?? `Do ${name}`,
+        ...(routes
+          ? {
+              routes: Object.fromEntries(
+                Object.entries(routes).map(([output, chain]) => [output, build(chain)]),
+              ),
+            }
+          : {}),
+      }));
     writeFileSync(
       join(repository, '.pipes/config.ts'),
-      `export default ${JSON.stringify({ setup, workflows: { work: { steps: ['implement', 'review'].map((name) => ({ agent: { command: [process.execPath, fixture, mode], model: 'large', provider: 'codex', reasoning: 'high' }, name, prompt: `Do ${name}` })) } } })};`,
+      `export default ${JSON.stringify({ setup, workflows: { work: { steps: build(steps) } } })};`,
+    );
+  };
+  const configure = (mode: string, setup?: Array<string>) =>
+    configureSteps(
+      mode,
+      ['implement', 'review'].map((name) => ({ name })),
+      setup,
     );
   const waitForRun = (id: string, predicate: (run: Run) => boolean) =>
     call((client) =>
@@ -101,6 +140,7 @@ export const bootHarness = async (): Promise<Harness> => {
   return {
     call,
     configure,
+    configureSteps,
     connection,
     directory,
     dispose: async () => {

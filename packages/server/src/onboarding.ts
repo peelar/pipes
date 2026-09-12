@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import skillText from '../../../skills/pipes/SKILL.md' with { type: 'text' };
-import { Agent, decodeConfig } from '@pipes/protocol';
+import { Agent, decodeConfig, walkSteps } from '@pipes/protocol';
 import { PipesError } from '@pipes/protocol';
 import { selfCommand } from './self';
 import { acpError, codexMcp, codexMcpInstalled, codexSkillPath, probeCodex } from './codex-acp';
@@ -117,7 +117,7 @@ export const checkCodexConfig = Effect.fn('checkCodexConfig')(
     );
     const checked = new Set<string>();
     for (const workflow of Object.values(configuration.workflows)) {
-      for (const { agent } of workflow.steps) {
+      for (const { agent } of walkSteps(workflow.steps)) {
         const key = JSON.stringify(agent);
         if (!checked.has(key)) {
           yield* probeCodex({ ...agent, path });

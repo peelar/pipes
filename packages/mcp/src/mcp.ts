@@ -1,6 +1,6 @@
 import { Effect, Option, Schema, Stdio, Stream } from 'effect';
 import { relative } from 'node:path';
-import { taskActions } from '@pipes/protocol';
+import { taskActions, workflowPath, type Step } from '@pipes/protocol';
 import { Brief, PipesError, Title, type Run, type Snapshot, type Task } from '@pipes/protocol';
 
 const Request = Schema.Struct({
@@ -76,6 +76,19 @@ const content = (value: unknown) => ({
   content: [{ text: JSON.stringify(value, null, 2), type: 'text' }],
 });
 
+interface StepDescription extends Omit<Step, 'agent' | 'routes'> {
+  agent: { model: string; provider: string; reasoning: string };
+  routes: { readonly [output: string]: ReadonlyArray<StepDescription> } | undefined;
+}
+
+const describeStep = ({ agent, ...step }: Step): StepDescription => ({
+  ...step,
+  agent: { model: agent.model, provider: agent.provider, reasoning: agent.reasoning },
+  routes: Object.fromEntries(
+    Object.entries(step.routes ?? {}).map(([output, chain]) => [output, chain.map(describeStep)]),
+  ),
+});
+
 function context(snapshot: Snapshot, taskId: string) {
   const task = snapshot.tasks.find((task) => task.id === taskId);
   if (!task) {
@@ -86,10 +99,11 @@ function context(snapshot: Snapshot, taskId: string) {
   const workflow = run?.configuration.workflows[run.workflow];
   const currentStep =
     run &&
-    workflow?.steps.find(
-      (step) =>
+    workflow &&
+    workflowPath(workflow.steps, run.attempts).find(
+      ({ step }) =>
         run.attempts.findLast((attempt) => attempt.step === step.name)?.status !== 'completed',
-    );
+    )?.step;
   return {
     attempts: run?.attempts.map(({ codexHome: _home, sessionId: _session, ...attempt }) => attempt),
     currentStep,
@@ -109,10 +123,7 @@ function context(snapshot: Snapshot, taskId: string) {
     },
     source: { id: task.sourceId, url: task.sourceUrl },
     task,
-    workflow: workflow?.steps.map(({ agent, ...step }) => ({
-      ...step,
-      agent: { model: agent.model, provider: agent.provider, reasoning: agent.reasoning },
-    })),
+    workflow: workflow?.steps.map(describeStep),
   };
 }
 

@@ -66,7 +66,7 @@ Each step defines an agent provider (such as `codex`), model, reasoning setting,
 
 TypeScript resolves to a serializable workflow definition at run start. Store that definition with the run. Later configuration edits affect new runs.
 
-Initially, workflows are ordered chains of agent steps. The agent decides how to perform its assignment; Pipes controls progression. An agent cannot silently skip or complete sibling steps.
+Initially, workflows are ordered chains of agent steps. The final step of a chain may be a routing step: it declares named outputs, each mapped to its own continuation chain. Completing a routing step requires reporting exactly one output; Pipes records it and runs only that output's chain. Routing steps may nest, and an empty continuation chain ends the workflow. Branches stay mutually exclusive: no parallel execution and no joins; a shared tail is written per branch. The agent decides how to perform its assignment; Pipes controls progression. An agent cannot silently skip or complete sibling steps.
 
 The included starter is `plan → implement → review`, written into repository configuration and editable like any other workflow. A step named `present` has no special runtime meaning.
 
@@ -76,7 +76,7 @@ Unsupported agent settings fail explicitly rather than silently falling back. Va
 
 ## Outcomes and human judgment
 
-Before custom output schemas, steps use a fixed result: `completed`, `blocked`, or `failed`, with a summary. The agent submits it through a dedicated Pipes MCP tool. Validate and persist the report, but advance only after the invocation ends successfully. A normal agent turn ending is not proof of task success.
+Before custom output schemas, steps use a fixed result: `completed`, `blocked`, or `failed`, with a summary. The agent submits it through a dedicated Pipes MCP tool. A routing step's completed result additionally carries exactly one declared output. Reports that are missing, unknown, or stray outputs are rejected as tool errors the agent may correct in the same turn; `blocked` and `failed` never carry an output. The recorded output selects the continuation chain and appears in later steps' context. Validate and persist the report, but advance only after the invocation ends successfully. A normal agent turn ending is not proof of task success.
 
 Completion advances the chain. Blockage or failure stops progression. A user can answer a blocked step in Pipes and continue it in a fresh attempt with the answer and previous evidence.
 
@@ -210,7 +210,7 @@ Support macOS and Linux; Windows users can use WSL. Ship a single executable con
 - Team ownership and collaboration.
 - Cloud environments and built-in remote client connectivity.
 - Additional source integrations and bidirectional source synchronization.
-- Branching, parallel graph branches, joins, and agent-driven routing.
+- Parallel graph branches and joins.
 - Automatic agent recovery loops and configurable agent retry policies.
 - Custom step-output schemas, deterministic workflow steps, and arbitrary code steps.
 - Child tasks and automatic task dependency scheduling.

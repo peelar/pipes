@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
-import { Agent, AgentCommand, Config, GitHubPolicy, GitHubRepository } from './config';
+import { Agent, AgentCommand, Config, GitHubPolicy, GitHubRepository, type Step } from './config';
 import { ExecutionStatus } from './execution-state';
 
 export const GitHubConnection = Schema.Struct({
@@ -75,9 +75,38 @@ export class Transition extends Schema.Class<Transition>('Transition')({
 }) {}
 
 export const StepResult = Schema.Struct({
+  // Present only when the assignment's step defines routes: the single named output
+  // that selects which continuation chain runs next.
+  output: Schema.optionalKey(Schema.NonEmptyString),
   status: Schema.Literals(['completed', 'blocked', 'failed']),
   summary: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(100_000)),
 });
+
+// Returns an error message when a reported result does not satisfy the step's routing contract.
+export function validateStepResult(
+  step: Step | undefined,
+  result: typeof StepResult.Type,
+): string | undefined {
+  const outputs = step?.routes ? Object.keys(step.routes) : [];
+  if (outputs.length > 0) {
+    if (result.status !== 'completed') {
+      return result.output
+        ? `Step ${step!.name} cannot report an output with ${result.status}.`
+        : undefined;
+    }
+    if (!result.output) {
+      return `Step ${step!.name} must report exactly one output: ${outputs.join(' | ')}.`;
+    }
+    return outputs.includes(result.output)
+      ? undefined
+      : `Step ${step!.name} output must be one of: ${outputs.join(' | ')}.`;
+  }
+  return result.output
+    ? step
+      ? `Step ${step.name} does not accept an output.`
+      : 'This step does not accept an output.'
+    : undefined;
+}
 
 export const Attempt = Schema.Struct({
   codexHome: Schema.optionalKey(Schema.String),

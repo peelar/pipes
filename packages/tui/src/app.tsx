@@ -6,6 +6,7 @@ import {
   Client,
   PipesError,
   taskActions,
+  workflowPath,
   type Repository,
   type Run,
   Snapshot,
@@ -219,10 +220,18 @@ export function StatusText({
 }
 
 export function workflowProgress(run: Pick<Run, 'attempts' | 'configuration' | 'workflow'>) {
-  return run.configuration.workflows[run.workflow]?.steps.map((step) => {
-    const status = run.attempts.findLast((attempt) => attempt.step === step.name)?.status;
-    return { name: step.name, status: status ?? ('waiting' as const) };
-  });
+  const steps = run.configuration.workflows[run.workflow]?.steps;
+  return workflowPath(steps, run.attempts).map(({ decision, step }) => ({
+    decision,
+    name: decision
+      ? `${step.name} → ${decision}`
+      : step.routes
+        ? `${step.name} (${Object.keys(step.routes).join(' | ')})`
+        : step.name,
+    status:
+      run.attempts.findLast((attempt) => attempt.step === step.name)?.status ??
+      ('waiting' as const),
+  }));
 }
 
 export function TaskDetails({

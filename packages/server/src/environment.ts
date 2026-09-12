@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { Config, type Agent } from '@pipes/protocol';
+import { Config, findStep, type Agent } from '@pipes/protocol';
 import { PipesError, type Run, type StepResult } from '@pipes/protocol';
 import { selfCommand } from './self';
 import { codexBinary, openCodex, probeCodex } from './codex-acp';
@@ -115,8 +115,9 @@ export class Environment extends Context.Service<
       );
       const handoffSession = Effect.fn('Environment.handoffSession')(function* (run: Run) {
         const attempt = run.attempts.at(-1);
-        const step = run.configuration.workflows[run.workflow]?.steps.find(
-          (step) => step.name === attempt?.step,
+        const step = findStep(
+          run.configuration.workflows[run.workflow]?.steps,
+          attempt?.step ?? '',
         );
         if (!attempt?.sessionId || step?.agent.command) {
           return yield* new PipesError({

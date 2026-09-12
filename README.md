@@ -72,6 +72,7 @@ You can monitor the work through TUI, jump into an agent session when you want t
 - A keyboard-first terminal UI with live agent messages, tool activity, and step progress.
 - Work that keeps running in the background, with tasks and history saved locally in SQLite.
 - TypeScript workflows with model, reasoning, and prompt settings for each step.
+- Routing steps that branch the workflow on an agent decision, such as a UI change versus a deeper change.
 - Separate Git worktrees for each run, with results saved to local branches.
 - Run a detached agent session or jump into a task's agent session when you want to take the wheel.
 - Work intake from connected tools: GitHub today, with more sources such as Linear and Sentry planned.

@@ -1,7 +1,14 @@
 import { Effect, Fiber } from 'effect';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Attempt, PipesError, type Run } from '@pipes/protocol';
+import {
+  Attempt,
+  PipesError,
+  validateStepResult,
+  workflowPath,
+  type Run,
+  type Step,
+} from '@pipes/protocol';
 import { failure } from '../errors';
 import type { ExecutionContext } from './context';
 import { applyFailureCause } from './outcome';
@@ -20,18 +27,29 @@ export const execute = Effect.fn('Execution.execute')(function* (
   const work = Effect.gen(function* () {
     run = { ...transition(run, 'begin'), workerStopped: false };
     yield* save();
-    const remaining = run.configuration.workflows[run.workflow]!.steps.filter(
-      (step) =>
-        run.attempts.findLast((attempt) => attempt.step === step.name)?.status !== 'completed',
-    );
+    const steps = () => run.configuration.workflows[run.workflow]!.steps;
+    // Steps still to execute: the active path from recorded decisions, minus completed steps.
+    // Recomputed after every attempt so branch steps appear once their route is decided.
+    const pending = () =>
+      workflowPath(steps(), run.attempts)
+        .map((position) => position.step)
+        .filter(
+          (step) =>
+            run.attempts.findLast((attempt) => attempt.step === step.name)?.status !== 'completed',
+        );
     const checked = new Set<string>();
-    for (const step of remaining) {
+    const probeAgent = (step: Step) => {
       const key = JSON.stringify(step.agent);
-      if (!checked.has(key)) {
-        yield* ctx.environment.probe(repository, step.agent);
-        checked.add(key);
-      }
-    }
+      return checked.has(key)
+        ? Effect.void
+        : Effect.tap(
+            ctx.environment.probe(repository, step.agent),
+            Effect.sync(() => {
+              checked.add(key);
+            }),
+          );
+    };
+    yield* Effect.forEach(pending(), probeAgent);
     if (!(yield* ctx.environment.exists(run))) {
       yield* ctx.environment.prepare(repository, run);
       if (run.configuration.setup) {
@@ -39,7 +57,8 @@ export const execute = Effect.fn('Execution.execute')(function* (
       }
     }
     prepared = true;
-    for (const step of remaining) {
+    for (let step = pending()[0]; step; step = pending()[0]) {
+      yield* probeAgent(step);
       const attemptId = crypto.randomUUID();
       const transcript = join(ctx.directory, 'artifacts', run.id, `${attemptId}.jsonl`);
       yield* Effect.try({
@@ -67,6 +86,10 @@ export const execute = Effect.fn('Execution.execute')(function* (
           report: async (result) => {
             if (attempt.result || ctx.cancellations.has(run.taskId)) {
               throw new Error('This attempt already reported a result or has ended.');
+            }
+            const invalid = validateStepResult(step, result);
+            if (invalid) {
+              throw new Error(invalid);
             }
             attempt = { ...attempt, result };
             await Effect.runPromiseWith(ctx.runContext)(saveAttempt());

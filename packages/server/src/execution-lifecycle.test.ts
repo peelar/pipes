@@ -3,6 +3,54 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bootHarness } from '../../../test/execution-harness';
 
+test('routing steps select one branch and reject malformed route reports', async () => {
+  const harness = await bootHarness();
+  const { call, configureSteps, submit, waitForRun } = harness;
+  try {
+    configureSteps('route-left', [
+      {
+        name: 'classify',
+        prompt: 'Is this a UI change or a deeper change?',
+        routes: {
+          left: [{ name: 'polish' }, { name: 'publish' }],
+          right: [{ name: 'rearchitect' }],
+        },
+      },
+    ]);
+    const task = await submit();
+    const started = await call((client) => client.start({ taskId: task.id }));
+    const routed = await waitForRun(started.id, (run) => run.status === 'awaiting_acceptance');
+    expect(routed.attempts.map((attempt) => [attempt.step, attempt.status])).toEqual([
+      ['classify', 'completed'],
+      ['polish', 'completed'],
+      ['publish', 'completed'],
+    ]);
+    expect(routed.attempts[0]!.result?.output).toBe('left');
+    expect(routed.attempts.some((attempt) => attempt.step === 'rearchitect')).toBe(false);
+    expect(readFileSync(routed.attempts[1]!.transcript, 'utf8')).toContain('classify → left');
+
+    for (const [mode, message] of [
+      ['route-no-output', 'must report exactly one output'],
+      ['route-wrong-output', 'output must be one of'],
+      ['route-stray-output', 'does not accept an output'],
+    ] as const) {
+      configureSteps(mode, [
+        {
+          name: 'classify',
+          prompt: 'Classify the change.',
+          routes: { left: [{ name: 'polish' }], right: [] },
+        },
+      ]);
+      const rejected = await submit();
+      const run = await call((client) => client.start({ taskId: rejected.id }));
+      await waitForRun(run.id, (current) => current.status === 'failed');
+      expect(readFileSync(join(harness.directory, 'tool-errors.txt'), 'utf8')).toContain(message);
+    }
+  } finally {
+    await harness.dispose();
+  }
+}, 30_000);
+
 test('server owns execution across client disconnects, validates outcomes, and checkpoints', async () => {
   const harness = await bootHarness();
   const { call, configure, directory, repository, submit, waitForRun } = harness;

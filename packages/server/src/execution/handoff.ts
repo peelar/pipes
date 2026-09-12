@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PipesError, Run, StepResult } from '@pipes/protocol';
+import { findStep, PipesError, Run, StepResult, validateStepResult } from '@pipes/protocol';
 import { nextExecutionState } from '@pipes/protocol';
 import { failure } from '../errors';
 import type { ExecutionContext } from './context';
@@ -79,6 +79,11 @@ export const handoffReport = Effect.fn('Execution.handoffReport')(function* (
     return yield* new PipesError({
       message: 'This interactive attempt already reported a result.',
     });
+  }
+  const step = findStep(run.configuration.workflows[run.workflow]?.steps, attempt.step);
+  const invalid = validateStepResult(step, input.result);
+  if (invalid) {
+    return yield* new PipesError({ message: invalid });
   }
   yield* ctx.store.saveRun({
     ...run,
