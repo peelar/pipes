@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { Config, type Agent } from '@pipes/protocol';
+import { decodeConfig, type Agent, type Config } from '@pipes/protocol';
 import { PipesError, type Run, type StepResult } from '@pipes/protocol';
 import { selfCommand } from './self';
 import { codexBinary, openCodex, probeCodex } from './codex-acp';
@@ -62,7 +62,8 @@ export class Environment extends Context.Service<
       const configuration = Effect.fn('Environment.configuration')(function* (repository: string) {
         const { args, executable } = selfCommand(['config', repository]);
         const output = yield* spawner.string(ChildProcess.make(executable, args));
-        return yield* Schema.decodeEffect(Schema.fromJsonString(Config))(output);
+        const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(output);
+        return yield* decodeConfig(value);
       }, Effect.mapError(failure));
       const probe = Effect.fn('Environment.probe')(
         function* (path: string, agent: typeof Agent.Type) {

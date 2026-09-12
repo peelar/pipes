@@ -4,7 +4,7 @@ import { PipesError, type Repository } from '@pipes/protocol';
 import { get, identity, requestError } from './auth';
 import type { GitHubContext } from './context';
 import { policyFor } from './repos';
-import { eligible, GitHubIssue } from './schemas';
+import { GitHubIssue, routeWorkflow } from './schemas';
 
 export const admit = Effect.fn('GitHub.admit')(function* (
   ctx: GitHubContext,
@@ -13,7 +13,8 @@ export const admit = Effect.fn('GitHub.admit')(function* (
   userId: number,
   issue: typeof GitHubIssue.Type,
 ) {
-  if (!eligible(issue, policy, userId)) {
+  const workflow = routeWorkflow(issue, policy, userId);
+  if (workflow === false) {
     return 0;
   }
   yield* ctx.store.submit({
@@ -22,10 +23,25 @@ export const admit = Effect.fn('GitHub.admit')(function* (
     sourceId: `github:${issue.id}`,
     sourceUrl: `https://github.com/${policy.repository}/issues/${issue.number}`,
     title: issue.title,
-    workflow: policy.workflow,
+    ...(workflow === undefined ? {} : { workflow }),
   });
   return 1;
 });
+
+const queryFor = (policy: NonNullable<Config['github']>) => {
+  const states = new Set([
+    policy.state ?? 'open',
+    ...(policy.routes?.map((route) => route.state ?? policy.state ?? 'open') ?? []),
+  ]);
+  const broadAssignee = [policy, ...(policy.routes ?? [])].some(
+    (rule) => (rule.assigned_to_me ?? policy.assigned_to_me) === false,
+  );
+  return {
+    assignee: broadAssignee ? undefined : true,
+    state:
+      states.has('all') || (states.has('open') && states.has('closed')) ? 'all' : [...states][0]!,
+  };
+};
 
 export const intake = Effect.fn('GitHub.intake')(function* (
   ctx: GitHubContext,
@@ -44,19 +60,20 @@ export const intake = Effect.fn('GitHub.intake')(function* (
     return 0;
   }
   const user = yield* identity(ctx);
+  const query = queryFor(policy);
   let matched = 0;
   for (let page = 1; ; page++) {
-    const query = new URLSearchParams({
+    const params = new URLSearchParams({
       direction: 'asc',
       page: String(page),
       per_page: '100',
       sort: 'created',
-      state: policy.state ?? 'open',
+      state: query.state,
     });
-    if (policy.assigned_to_me !== false) {
-      query.set('assignee', user.login);
+    if (query.assignee) {
+      params.set('assignee', user.login);
     }
-    const issues = yield* get(ctx, `/repos/${policy.repository}/issues?${query}`).pipe(
+    const issues = yield* get(ctx, `/repos/${policy.repository}/issues?${params}`).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(GitHubIssue))),
       Effect.mapError(requestError),
     );

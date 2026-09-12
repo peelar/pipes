@@ -66,6 +66,8 @@ Each step defines an agent provider (such as `codex`), model, reasoning setting,
 
 TypeScript resolves to a serializable workflow definition at run start. Store that definition with the run. Later configuration edits affect new runs.
 
+Configuration is append-only in what it accepts. User-owned `.pipes/*.ts` files are never rewritten by Pipes, so every historical configuration shape must keep decoding into the current `Config` through the single `decodeConfig` entry point, which normalizes old shapes rather than rejecting them. Additive changes (new optional fields) are unspecified implementation detail; renames, removals, or newly required fields change the contract and need explicit user direction plus a deprecation path. Stored run snapshots embed their resolved configuration and ride the same guarantee; a read-time upgrader is added only if a breaking change ever lands.
+
 Initially, workflows are ordered chains of agent steps. The agent decides how to perform its assignment; Pipes controls progression. An agent cannot silently skip or complete sibling steps.
 
 The included starter is `plan → implement → review`, written into repository configuration and editable like any other workflow. A step named `present` has no special runtime meaning.
